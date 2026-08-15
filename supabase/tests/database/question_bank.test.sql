@@ -1,6 +1,6 @@
 begin;
 
-select plan(18);
+select plan(19);
 
 select has_function('public', 'save_question_atomic', array['uuid','text','text','jsonb','text','text','text','smallint','text','text','text','jsonb','jsonb','jsonb'], 'question save RPC exists');
 select isnt(has_table_privilege('anon', 'public.questions', 'SELECT'), true, 'anon cannot read Question Bank');
