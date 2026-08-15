@@ -17,27 +17,12 @@ export const BUILTIN_SOUNDS = [
   { key: "trombone", label: "Sad trombone", emoji: "📉" },
 ] as const;
 
-export const HOST_SOUND_CUES = [
-  { key: "applause", label: "Applause", emoji: "👏" },
-  { key: "laugh", label: "Laugh", emoji: "😂" },
-  { key: "boo", label: "Boo", emoji: "👎" },
-  { key: "drumroll", label: "Drumroll", emoji: "🥁" },
-  { key: "rimshot", label: "Ba-dum-tss", emoji: "😎" },
-  { key: "victory", label: "Victory", emoji: "🎉" },
-] as const;
-
 export type BuiltinSoundKey = (typeof BUILTIN_SOUNDS)[number]["key"];
-export type HostSoundCueKey = (typeof HOST_SOUND_CUES)[number]["key"];
 
 const SOUND_KEYS = new Set<string>(BUILTIN_SOUNDS.map((sound) => sound.key));
-const HOST_CUE_KEYS = new Set<string>(HOST_SOUND_CUES.map((sound) => sound.key));
 
 export function isBuiltinSoundKey(value: string): value is BuiltinSoundKey {
   return SOUND_KEYS.has(value);
-}
-
-export function isHostSoundCueKey(value: string): value is HostSoundCueKey {
-  return HOST_CUE_KEYS.has(value);
 }
 
 export function soundLabel(key: string | null): string {
@@ -46,8 +31,4 @@ export function soundLabel(key: string | null): string {
 
 export function soundEmoji(key: string | null): string {
   return BUILTIN_SOUNDS.find((sound) => sound.key === key)?.emoji ?? "🎵";
-}
-
-export function hostCueLabel(key: HostSoundCueKey): string {
-  return HOST_SOUND_CUES.find((sound) => sound.key === key)?.label ?? key;
 }
