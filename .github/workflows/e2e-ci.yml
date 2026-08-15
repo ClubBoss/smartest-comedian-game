@@ -19,7 +19,8 @@ jobs:
           version: 2.110.0
       - run: npm install
       - run: npx playwright install --with-deps chromium
-      - run: supabase start
+      - name: Start minimal Supabase stack
+        run: supabase start -x gotrue,realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
       - run: supabase db reset
       - name: Export local Supabase environment
         shell: bash

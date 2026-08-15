@@ -1,12 +1,27 @@
 begin;
 
-select plan(8);
+select plan(11);
 
 select has_function(
   'public',
   'join_room_atomic',
   array['text', 'text', 'text', 'text'],
   'atomic room join function exists'
+);
+
+select ok(
+  has_table_privilege('service_role', 'public.rooms', 'SELECT'),
+  'service role can read rooms'
+);
+
+select ok(
+  has_table_privilege('service_role', 'public.rooms', 'INSERT'),
+  'service role can create rooms'
+);
+
+select ok(
+  has_table_privilege('service_role', 'public.players', 'UPDATE'),
+  'service role can update players'
 );
 
 insert into rooms (code, host_secret_hash, capacity) values ('JOIN2', 'hash', 2);
