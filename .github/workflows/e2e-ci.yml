@@ -1,0 +1,49 @@
+name: E2E CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.110.0
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - name: Start minimal Supabase stack
+        run: supabase start -x realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      - run: supabase db reset
+      - name: Export local Supabase environment
+        shell: bash
+        run: |
+          eval "$(supabase status -o env)"
+          : "${ANON_KEY:?Supabase local ANON_KEY is missing}"
+          : "${SERVICE_ROLE_KEY:?Supabase local SERVICE_ROLE_KEY is missing}"
+          echo "NEXT_PUBLIC_SUPABASE_URL=${API_URL:-http://127.0.0.1:54321}" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+      - name: Start web app
+        run: |
+          npm run dev -- --hostname 127.0.0.1 > /tmp/smartest-comedian-next.log 2>&1 &
+          echo $! > /tmp/smartest-comedian-next.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/host > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/smartest-comedian-next.log
+          exit 1
+      - run: npm run test:e2e
+      - name: Print web app log on failure
+        if: failure()
+        run: cat /tmp/smartest-comedian-next.log || true
