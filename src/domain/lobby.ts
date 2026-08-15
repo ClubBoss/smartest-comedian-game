@@ -5,6 +5,7 @@ export type LobbyPlayer = {
   soundType: "builtin" | "custom";
   soundKey: string | null;
   score: number;
+  isReady: boolean;
 };
 
 export type BuzzState = {
@@ -53,6 +54,6 @@ export type LobbyState = {
   question: PublicQuestionState | null;
 };
 
-export type PlayerIdentity = Omit<LobbyPlayer, "score"> & {
+export type PlayerIdentity = Omit<LobbyPlayer, "score" | "isReady"> & {
   reconnectToken: string;
 };

@@ -1,11 +1,19 @@
 import { getSupabaseAdmin } from "./supabase-admin";
 
-export async function broadcastRoomRefresh(code: string): Promise<void> {
+async function broadcast(code: string, channelName: string, event: string, payload: object): Promise<void> {
   try {
     const supabase = getSupabaseAdmin();
-    const channel = supabase.channel(`room:${code}`);
-    await channel.httpSend("state_changed", { code });
+    const channel = supabase.channel(channelName);
+    await channel.httpSend(event, payload);
   } catch (error) {
-    console.warn("Realtime refresh broadcast failed", error);
+    console.warn(`Realtime ${event} broadcast failed`, error);
   }
+}
+
+export async function broadcastRoomRefresh(code: string): Promise<void> {
+  await broadcast(code, `room:${code}`, "state_changed", { code });
+}
+
+export async function broadcastRoomMeta(code: string, event: string, payload: object): Promise<void> {
+  await broadcast(code, `room-meta:${code}`, event, payload);
 }

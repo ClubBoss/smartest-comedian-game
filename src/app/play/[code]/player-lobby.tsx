@@ -1,6 +1,7 @@
 "use client";
 
 import { BUILTIN_SOUNDS, soundLabel } from "@/domain/sounds";
+import { useRoomPresence } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -13,6 +14,16 @@ type Identity = {
   reconnectToken: string;
 };
 
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request: (type: "screen") => Promise<WakeLockSentinelLike>;
+  };
+};
+
 export function PlayerLobby({ code }: { code: string }) {
   const storageKey = `smartest-player-${code}`;
   const { state: lobby, error: roomError, refresh } = useRoomState(code);
@@ -23,6 +34,9 @@ export function PlayerLobby({ code }: { code: string }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [buzzing, setBuzzing] = useState(false);
+  const [readyBusy, setReadyBusy] = useState(false);
+  const [soundTesting, setSoundTesting] = useState(false);
+  const { status: realtimeStatus } = useRoomPresence(code, identity ? "player" : null, identity?.playerId ?? null);
 
   useEffect(() => {
     const raw = localStorage.getItem(storageKey);
@@ -41,6 +55,33 @@ export function PlayerLobby({ code }: { code: string }) {
       localStorage.removeItem(storageKey);
     }
   }, [code, storageKey]);
+
+  useEffect(() => {
+    if (!identity) return;
+    const wakeLock = (navigator as WakeLockNavigator).wakeLock;
+    if (!wakeLock) return;
+    let sentinel: WakeLockSentinelLike | null = null;
+    let active = true;
+
+    const acquire = async () => {
+      if (!active || document.visibilityState !== "visible" || sentinel) return;
+      try {
+        sentinel = await wakeLock.request("screen");
+      } catch {
+        sentinel = null;
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+    void acquire();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (sentinel) void sentinel.release().catch(() => undefined);
+    };
+  }, [identity]);
 
   async function join(event: FormEvent) {
     event.preventDefault();
@@ -90,6 +131,47 @@ export function PlayerLobby({ code }: { code: string }) {
     }
   }
 
+  async function setReady(ready: boolean) {
+    if (!identity) return;
+    setReadyBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/rooms/${code}/players/${identity.playerId}/ready`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-player-token": identity.reconnectToken,
+        },
+        body: JSON.stringify({ ready }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not update ready state.");
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update ready state.");
+    } finally {
+      setReadyBusy(false);
+    }
+  }
+
+  async function testSound() {
+    if (!identity) return;
+    setSoundTesting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/rooms/${code}/players/${identity.playerId}/sound-test`, {
+        method: "POST",
+        headers: { "x-player-token": identity.reconnectToken },
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not send sound test.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not send sound test.");
+    } finally {
+      setSoundTesting(false);
+    }
+  }
+
   async function buzz() {
     if (!identity || !lobby?.buzz || lobby.buzz.status !== "open") return;
     setBuzzing(true);
@@ -105,6 +187,7 @@ export function PlayerLobby({ code }: { code: string }) {
       });
       const result = await response.json();
       if (!response.ok && response.status !== 409) throw new Error(result.error ?? "Could not submit buzz.");
+      navigator.vibrate?.(response.ok ? [35, 25, 70] : 30);
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not submit buzz.");
@@ -122,12 +205,16 @@ export function PlayerLobby({ code }: { code: string }) {
     const isWinner = lobby.buzz?.winnerId === identity.playerId;
     const currentPlayer = lobby.players.find((player) => player.id === identity.playerId);
     const score = currentPlayer?.score ?? 0;
+    const isReady = currentPlayer?.isReady ?? false;
     return (
       <main className="stack narrow player-controller">
         <div className="split-heading">
           <div>
             <p className="eyebrow">Room {code}</p>
             <h1>{identity.displayName}</h1>
+            <span className={`status-pill ${realtimeStatus === "realtime" ? "live" : ""}`}>
+              {realtimeStatus === "realtime" ? "Connected" : realtimeStatus === "fallback" ? "Reconnecting" : "Connecting"}
+            </span>
           </div>
           <div className="player-score-badge"><span>Score</span><strong>{score}</strong></div>
         </div>
@@ -142,11 +229,19 @@ export function PlayerLobby({ code }: { code: string }) {
           {isWinner && lobby.buzz?.scoreResolved ? (
             <p className="score-result">Answer score: {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</p>
           ) : null}
-          <p className="muted compact">Each new buzzer cycle makes everyone eligible again, including the previous respondent.</p>
+          <p className="muted compact">Screen stays awake while this controller is open when your browser supports Wake Lock.</p>
         </section>
         <section className="card stack center">
           <div className="seat-badge">Seat {identity.seatOrder}</div>
           <div className="big-sound">{identity.soundType === "custom" ? "Custom sound" : soundLabel(identity.soundKey)}</div>
+          <div className="host-actions">
+            <button className={isReady ? "primary" : "secondary"} disabled={readyBusy} onClick={() => void setReady(!isReady)}>
+              {readyBusy ? "Saving..." : isReady ? "✓ Ready" : "I'm ready"}
+            </button>
+            <button className="secondary" disabled={soundTesting} onClick={() => void testSound()}>
+              {soundTesting ? "Sending..." : "Test sound on TV"}
+            </button>
+          </div>
           <label className="upload-button">
             {uploading ? "Uploading..." : "Upload custom sound"}
             <input
