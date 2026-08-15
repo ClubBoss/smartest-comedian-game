@@ -27,7 +27,7 @@ test("host can create a new room without losing the previous room", async ({ pag
   expect(secondCode).not.toBe(firstCode);
 
   await page.getByText(/^Rooms · /).click();
-  const firstRoomRow = page.getByText(`Room ${firstCode}`, { exact: true }).locator("..");
+  const firstRoomRow = page.locator(".split-heading").filter({ hasText: `Room ${firstCode}` });
   await expect(firstRoomRow.getByRole("button", { name: "Open" })).toBeVisible();
   await firstRoomRow.getByRole("button", { name: "Open" }).click();
 
