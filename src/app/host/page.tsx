@@ -1,5 +1,5 @@
-import { HostLobby } from "./host-lobby";
+import { HostRoomManager } from "./host-room-manager";
 
 export default function HostPage() {
-  return <HostLobby />;
+  return <HostRoomManager />;
 }
