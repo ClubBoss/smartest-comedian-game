@@ -3,20 +3,13 @@
 ## Recommended stack
 
 - Frontend: Next.js + React + TypeScript.
-- Styling: Tailwind CSS or equivalent minimal utility layer.
+- Styling: minimal utility/CSS layer.
 - Backend/data: Supabase Postgres.
 - Realtime: Supabase Realtime.
+- Media: Supabase Storage for question images and optional custom buzzer audio.
 - Auth: anonymous/player session token + protected host secret; full account system deferred.
-- Validation: Zod.
+- Validation: application/domain validation with strict TypeScript; schema library may be added when forms arrive.
 - Tests: Vitest for domain logic, Playwright for multi-client flows.
-- Hosting: Vercel/Cloudflare-compatible web deployment; backend hosted separately in Supabase.
-
-## Why this stack
-
-- Realtime room state with minimal infrastructure.
-- Postgres fits persistent Question Bank and audit log cleanly.
-- Web-first join friction is near zero.
-- Easy to evolve from private home tool to reusable party-game product.
 
 ## Logical modules
 
@@ -30,16 +23,19 @@ Buzz cycle IDs, atomic first-winner claim, reset/reopen.
 Append-only score transactions and derived totals.
 
 ### `questions`
-Question Bank CRUD, hints, metadata, search/filter.
+Question Bank CRUD, ordered hints, ordered images, metadata, search/filter.
 
 ### `game`
-Current question snapshot, reveal state, phase transitions.
+Current question snapshot, media snapshot, reveal state, phase transitions.
 
 ### `presence`
-Connection/reconnect indicators. Presence is advisory; persistent room/player data remains in Postgres.
+Connection/reconnect indicators. Persistent room/player data remains canonical in Postgres.
+
+### `media`
+Question-image and custom-buzzer-audio storage metadata. Blob storage is not the source of game state.
 
 ### `audio`
-Client-side sound registry and winner playback.
+Built-in sound registry plus custom sound playback.
 
 ## Data model
 
@@ -58,11 +54,16 @@ Client-side sound registry and winner playback.
 - id UUID PK
 - room_id UUID FK
 - display_name TEXT
-- sound_key TEXT
+- sound_type TEXT: builtin | custom
+- sound_key TEXT NULL for builtin registry key
+- custom_sound_path TEXT NULL for uploaded audio
+- custom_sound_mime_type TEXT NULL
 - seat_order INT
 - reconnect_token_hash TEXT
 - removed_at TIMESTAMPTZ NULL
 - joined_at TIMESTAMPTZ
+
+Player sound selection is part of reconnectable identity. Application/UI should keep active sounds distinct in a room; custom uploads naturally have unique storage paths.
 
 ### score_events
 - id UUID PK
@@ -73,11 +74,11 @@ Client-side sound registry and winner playback.
 - reverted_event_id UUID NULL
 - created_at TIMESTAMPTZ
 
-Total score = sum(active score events). This gives safe undo and auditability.
+Total score = sum(active score events).
 
 ### questions
 - id UUID PK
-- prompt TEXT
+- prompt TEXT NULL
 - answer TEXT
 - explanation TEXT NULL
 - host_notes TEXT NULL
@@ -89,29 +90,48 @@ Total score = sum(active score events). This gives safe undo and auditability.
 - created_at TIMESTAMPTZ
 - updated_at TIMESTAMPTZ
 
+Application validation requires a non-empty prompt or at least one question asset.
+
 ### question_hints
 - id UUID PK
 - question_id UUID FK
 - position INT
 - text TEXT
 
+### question_assets
+- id UUID PK
+- question_id UUID FK
+- asset_type TEXT (V1: image)
+- position INT
+- storage_path TEXT
+- mime_type TEXT
+- alt_text TEXT NULL
+- caption TEXT NULL
+- width INT NULL
+- height INT NULL
+
+Assets are ordered and editable independently from source code.
+
 ### question_tags
 - question_id UUID FK
 - tag TEXT
 
 ### question_sessions
-Snapshot used for one live round:
+Immutable live-round snapshot:
 - id UUID PK
 - room_id UUID FK
 - source_question_id UUID NULL
-- prompt_snapshot TEXT
+- prompt_snapshot TEXT NULL
 - answer_snapshot TEXT
 - explanation_snapshot TEXT NULL
 - hints_snapshot JSONB
+- assets_snapshot JSONB
 - revealed_hint_count INT
 - answer_revealed BOOLEAN
 - started_at TIMESTAMPTZ
 - ended_at TIMESTAMPTZ NULL
+
+`assets_snapshot` stores ordered immutable metadata/storage references sufficient to reproduce the played round even if the source question is later edited.
 
 ### buzz_cycles
 - id UUID PK
@@ -122,28 +142,38 @@ Snapshot used for one live round:
 - winner_received_at TIMESTAMPTZ NULL
 - closed_at TIMESTAMPTZ NULL
 
+Question session remains nullable so manual gameplay is never blocked by Question Bank.
+
 ## Atomic buzz
 
-Implement as a server-side Postgres RPC/function similar to:
+Implement server-side:
 
 1. Validate player belongs to room.
 2. Validate requested cycle is current and open.
-3. `UPDATE buzz_cycles SET winner_player_id = $player, winner_received_at = now(), closed_at = now() WHERE id = $cycle AND winner_player_id IS NULL AND closed_at IS NULL RETURNING ...`.
-4. One caller gets a row; all later callers get no winner.
+3. Atomically update the cycle only when `winner_player_id IS NULL` and `closed_at IS NULL`.
+4. One caller gets the row; later callers do not.
 
-This avoids double winners without trusting device time.
+Client timestamps are never authoritative.
+
+## Media handling
+
+- Question images and custom sounds are uploaded to managed object storage.
+- Database stores stable paths and metadata, not raw blobs.
+- Upload validation is server-enforced before metadata becomes usable.
+- Image/audio fetch failure must degrade gracefully and never corrupt room state.
+- Deleting/editing source Question Bank media must not invalidate already-played snapshots; storage-retention policy must account for referenced snapshots.
 
 ## Security model
 
 - Public room code is not host authority.
 - Host mutation calls require host secret/session.
-- Player mutation limited to own join/reconnect/buzz actions.
-- Score/question/phase mutations host-only.
+- Player mutation is limited to own join/reconnect/buzz/sound-selection actions.
+- Score/question/media/phase mutations are host-only except a player's own permitted custom buzzer upload flow.
 - Database RLS or server-only mutation endpoints enforce authority.
 
 ## Resilience
 
 - Realtime messages are notifications, not source of truth.
 - On reconnect, clients re-fetch canonical state.
-- Audio is best-effort and decoupled from buzz acceptance.
-- Host actions should expose recovery controls: reset buzzer, manual score adjustment, remove player, return to lobby.
+- Audio/media are best-effort and decoupled from buzz acceptance.
+- Host recovery controls remain available.
