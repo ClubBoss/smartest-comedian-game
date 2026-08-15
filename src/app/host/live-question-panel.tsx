@@ -1,0 +1,237 @@
+"use client";
+
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+type ReadyQuestion = {
+  id: string;
+  prompt: string | null;
+  category: string | null;
+  difficulty: number | null;
+};
+
+type QueueItem = {
+  id: string;
+  questionId: string | null;
+  position: number;
+  state: "queued" | "played" | "skipped";
+  prompt: string;
+  category: string | null;
+};
+
+type PrivateAsset = {
+  storagePath: string;
+  mimeType: string | null;
+  altText: string | null;
+  caption: string | null;
+  width: number | null;
+  height: number | null;
+  previewUrl: string | null;
+};
+
+type CurrentQuestion = {
+  sessionId: string;
+  sourceQuestionId: string | null;
+  queueItemId: string | null;
+  prompt: string | null;
+  answer: string;
+  answerVariants: string[];
+  explanation: string | null;
+  hostNotes: string | null;
+  hints: string[];
+  assets: PrivateAsset[];
+  stimulusRevealed: boolean;
+  revealedHintCount: number;
+  answerRevealed: boolean;
+};
+
+type AdminState = {
+  readyQuestions: ReadyQuestion[];
+  queue: QueueItem[];
+  current: CurrentQuestion | null;
+};
+
+export function LiveQuestionPanel({
+  code,
+  hostToken,
+  onRoomRefresh,
+}: {
+  code: string;
+  hostToken: string;
+  onRoomRefresh: () => Promise<void>;
+}) {
+  const [state, setState] = useState<AdminState | null>(null);
+  const [selectedQuestionId, setSelectedQuestionId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const response = await fetch(`/api/rooms/${code}/questions`, {
+      headers: { "x-host-token": hostToken },
+      cache: "no-store",
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? "Could not load live questions.");
+    setState(result as AdminState);
+  }, [code, hostToken]);
+
+  useEffect(() => {
+    let active = true;
+    const initial = window.setTimeout(() => {
+      void load().catch((caught) => {
+        if (active) setError(caught instanceof Error ? caught.message : "Could not load live questions.");
+      });
+    }, 0);
+    const interval = window.setInterval(() => {
+      void load().catch(() => undefined);
+    }, 4000);
+    return () => {
+      active = false;
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [load]);
+
+  async function act(action: string, extra: object = {}) {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/rooms/${code}/questions/action`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-host-token": hostToken,
+        },
+        body: JSON.stringify({ action, ...extra }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        const messages: Record<string, string> = {
+          ERR_QUESTION_ACTIVE: "Finish the current question before starting another one.",
+          ERR_QUESTION_NOT_READY: "Only Ready questions can be used in a game.",
+          ERR_QUEUE_EMPTY: "The queue is empty.",
+          ERR_NO_MORE_HINTS: "All hints are already revealed.",
+          ERR_STIMULUS_HIDDEN: "Show the question before this action.",
+          ERR_NO_ACTIVE_QUESTION: "There is no active question.",
+        };
+        throw new Error(messages[result.error] ?? result.error ?? "Question action failed.");
+      }
+      await Promise.all([load(), onRoomRefresh()]);
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Question action failed.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const queued = useMemo(
+    () => (state?.queue ?? []).filter((item) => item.state === "queued"),
+    [state?.queue],
+  );
+
+  if (!state) {
+    return <section className="card"><p className="muted compact">Loading live question controller...</p>{error ? <p className="error">{error}</p> : null}</section>;
+  }
+
+  if (state.current) {
+    const current = state.current;
+    const canRevealHint = current.stimulusRevealed && current.revealedHintCount < current.hints.length && !current.answerRevealed;
+    return (
+      <section className="card stack live-question-host">
+        <div className="split-heading">
+          <div>
+            <p className="eyebrow">Live question</p>
+            <h2>{current.prompt || "Image-led question"}</h2>
+          </div>
+          <span className="status-pill">
+            {current.answerRevealed ? "ANSWER SHOWN" : current.stimulusRevealed ? "VISIBLE" : "PRELOADED · PRIVATE"}
+          </span>
+        </div>
+
+        {current.assets.length > 0 ? (
+          <div className="host-question-images">
+            {current.assets.map((asset, index) => asset.previewUrl ? (
+              <figure key={`${asset.storagePath}-${index}`}>
+                <Image src={asset.previewUrl} alt={asset.altText ?? `Question image ${index + 1}`} width={320} height={200} unoptimized />
+                {asset.caption ? <figcaption>{asset.caption}</figcaption> : null}
+              </figure>
+            ) : null)}
+          </div>
+        ) : null}
+
+        <div className="host-private-answer">
+          <p className="eyebrow">Host only · answer</p>
+          <strong>{current.answer}</strong>
+          {current.answerVariants.length > 0 ? <p>Accept: {current.answerVariants.join(" · ")}</p> : null}
+          {current.explanation ? <p>{current.explanation}</p> : null}
+          {current.hostNotes ? <p className="host-note">Host note: {current.hostNotes}</p> : null}
+        </div>
+
+        {current.hints.length > 0 ? (
+          <div className="stack host-hints">
+            <strong>Hints</strong>
+            {current.hints.map((hint, index) => (
+              <div className={index < current.revealedHintCount ? "host-hint revealed" : "host-hint"} key={`${index}-${hint}`}>
+                <span>{index + 1}</span><p>{hint}</p><em>{index < current.revealedHintCount ? "shown" : "private"}</em>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="live-question-actions">
+          <button className="primary" disabled={busy || current.stimulusRevealed} onClick={() => void act("reveal-stimulus")}>Show question</button>
+          <button className="secondary" disabled={busy || !canRevealHint} onClick={() => void act("reveal-hint")}>Reveal next hint</button>
+          <button className="secondary" disabled={busy || current.answerRevealed} onClick={() => void act("reveal-answer")}>Reveal answer</button>
+          <button className="secondary" disabled={busy} onClick={() => void act("finish")}>Finish question</button>
+        </div>
+        {!current.stimulusRevealed ? <p className="muted compact">TV and players cannot see the prompt, photos, hints or answer yet. Buzzer is intentionally blocked until Show question.</p> : null}
+        {error ? <p className="error">{error}</p> : null}
+      </section>
+    );
+  }
+
+  return (
+    <section className="card stack live-question-host">
+      <div className="split-heading">
+        <div>
+          <p className="eyebrow">Questions</p>
+          <h2>Prepare the next question</h2>
+        </div>
+        <button className="secondary" disabled={busy || queued.length === 0} onClick={() => void act("start-next")}>Preload next queued</button>
+      </div>
+
+      <div className="question-picker-row">
+        <select value={selectedQuestionId} onChange={(event) => setSelectedQuestionId(event.target.value)}>
+          <option value="">Choose a Ready question...</option>
+          {state.readyQuestions.map((question) => (
+            <option key={question.id} value={question.id}>
+              {question.prompt || "Image-led question"}{question.category ? ` · ${question.category}` : ""}
+            </option>
+          ))}
+        </select>
+        <button className="secondary" disabled={busy || !selectedQuestionId} onClick={() => void act("queue", { questionId: selectedQuestionId })}>Add to queue</button>
+        <button className="primary" disabled={busy || !selectedQuestionId} onClick={() => void act("start", { questionId: selectedQuestionId })}>Preload now</button>
+      </div>
+
+      <div className="stack">
+        <strong>Queue</strong>
+        {queued.length === 0 ? <p className="muted compact">Queue is empty. You can still preload any Ready question directly.</p> : null}
+        {queued.map((item, index) => (
+          <div className="queue-row" key={item.id}>
+            <span className="seat">{index + 1}</span>
+            <div><strong>{item.prompt || "Image-led question"}</strong>{item.category ? <p className="muted compact">{item.category}</p> : null}</div>
+            <div className="mini-actions">
+              <button className="secondary" disabled={busy || index === 0} onClick={() => void act("move", { queueItemId: item.id, direction: -1 })}>Up</button>
+              <button className="secondary" disabled={busy || index === queued.length - 1} onClick={() => void act("move", { queueItemId: item.id, direction: 1 })}>Down</button>
+              <button className="secondary" disabled={busy || !item.questionId} onClick={() => void act("start", { questionId: item.questionId, queueItemId: item.id })}>Preload</button>
+              <button className="secondary" disabled={busy} onClick={() => void act("skip", { queueItemId: item.id })}>Skip</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+    </section>
+  );
+}
