@@ -106,17 +106,36 @@ function loadRecordedBuffer(context: AudioContext, url: string): Promise<AudioBu
   return pending;
 }
 
+function waitForRecordedBuffer(
+  context: AudioContext,
+  url: string,
+  maxWaitMs: number,
+): Promise<AudioBuffer | null> {
+  const pending = loadRecordedBuffer(context, url);
+  if (maxWaitMs <= 0) return Promise.resolve(null);
+  return Promise.race([
+    pending,
+    new Promise<AudioBuffer | null>((resolve) => {
+      window.setTimeout(() => resolve(null), maxWaitMs);
+    }),
+  ]);
+}
+
 function warmRecordedCues(context: AudioContext) {
   for (const cue of Object.values(RECORDED_CUES)) {
     if (cue) void loadRecordedBuffer(context, cue.url);
   }
 }
 
-async function playRecordedCue(context: AudioContext, key: string | null): Promise<boolean> {
+async function playRecordedCue(
+  context: AudioContext,
+  key: string | null,
+  maxWaitMs: number,
+): Promise<boolean> {
   if (!key) return false;
   const cue = RECORDED_CUES[key];
   if (!cue) return false;
-  const buffer = await loadRecordedBuffer(context, cue.url);
+  const buffer = await waitForRecordedBuffer(context, cue.url, maxWaitMs);
   if (!buffer) return false;
 
   const offset = Math.max(0, Math.min(cue.offset ?? 0, Math.max(0, buffer.duration - 0.02)));
@@ -291,11 +310,11 @@ function scheduleBuiltIn(context: AudioContext, key: string | null, output: Audi
   }
 }
 
-export async function playBuiltInCue(key: string | null): Promise<void> {
+export async function playBuiltInCue(key: string | null, maxRecordedWaitMs = 900): Promise<void> {
   const context = await ensureRunningContext();
   if (!context) return;
 
-  if (await playRecordedCue(context, key)) return;
+  if (await playRecordedCue(context, key, maxRecordedWaitMs)) return;
 
   const master = context.createGain();
   master.gain.setValueAtTime(0.8, context.currentTime);
@@ -321,5 +340,5 @@ export async function playWinnerCue(
     await audio.play();
     return;
   }
-  await playBuiltInCue(soundKey);
+  await playBuiltInCue(soundKey, 150);
 }
