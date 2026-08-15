@@ -205,7 +205,7 @@ export async function POST(request: Request) {
 
     if (asset.kind === "existing") {
       if (!asset.storagePath || !oldPaths.has(asset.storagePath)) {
-        await supabase.storage.from("question-images").remove(newlyUploaded);
+        if (newlyUploaded.length > 0) await supabase.storage.from("question-images").remove(newlyUploaded);
         return Response.json({ error: "Existing image reference is invalid." }, { status: 400 });
       }
       const prior = (oldAssets ?? []).find((item) => item.storage_path === asset.storagePath);
@@ -222,18 +222,18 @@ export async function POST(request: Request) {
     }
 
     if (asset.kind !== "new" || !asset.uploadKey) {
-      await supabase.storage.from("question-images").remove(newlyUploaded);
+      if (newlyUploaded.length > 0) await supabase.storage.from("question-images").remove(newlyUploaded);
       return Response.json({ error: "New image metadata is invalid." }, { status: 400 });
     }
 
     const file = form.get(asset.uploadKey);
     if (!(file instanceof File)) {
-      await supabase.storage.from("question-images").remove(newlyUploaded);
+      if (newlyUploaded.length > 0) await supabase.storage.from("question-images").remove(newlyUploaded);
       return Response.json({ error: "A selected image is missing from upload." }, { status: 400 });
     }
     const extension = IMAGE_TYPES.get(file.type);
     if (!extension || file.size <= 0 || file.size > MAX_IMAGE_BYTES) {
-      await supabase.storage.from("question-images").remove(newlyUploaded);
+      if (newlyUploaded.length > 0) await supabase.storage.from("question-images").remove(newlyUploaded);
       return Response.json({ error: "Images must be JPG, PNG, WEBP or GIF and no larger than 5 MB." }, { status: 400 });
     }
 
@@ -245,7 +245,7 @@ export async function POST(request: Request) {
         upsert: false,
       });
     if (uploadError) {
-      await supabase.storage.from("question-images").remove(newlyUploaded);
+      if (newlyUploaded.length > 0) await supabase.storage.from("question-images").remove(newlyUploaded);
       console.error("Question image upload failed", uploadError);
       return Response.json({ error: "Could not upload question image." }, { status: 500 });
     }
@@ -288,12 +288,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Could not save question." }, { status: 500 });
   }
 
-  const retainedPaths = new Set(savedAssets.map((asset) => asset.storage_path));
-  const removedPaths = [...oldPaths].filter((path) => !retainedPaths.has(path));
-  if (removedPaths.length > 0) {
-    const { error: removeError } = await supabase.storage.from("question-images").remove(removedPaths);
-    if (removeError) console.error("Old question image cleanup failed", removeError);
-  }
-
+  // Do not physically delete media removed from the current source question.
+  // A played question snapshot may still reference the same object later. Safe
+  // garbage collection must prove that no source question or live snapshot
+  // references a path before deleting it.
   return Response.json({ id: savedId ?? questionId });
 }
