@@ -114,6 +114,7 @@ create table question_sessions (
   host_notes_snapshot text null,
   hints_snapshot jsonb not null default '[]'::jsonb,
   assets_snapshot jsonb not null default '[]'::jsonb,
+  stimulus_revealed boolean not null default false,
   revealed_hint_count integer not null default 0 check (revealed_hint_count >= 0),
   answer_revealed boolean not null default false,
   started_at timestamptz not null default now(),
@@ -126,8 +127,14 @@ create table buzz_cycles (
   question_session_id uuid null references question_sessions(id) on delete set null,
   opened_at timestamptz not null default now(),
   winner_player_id uuid null references players(id) on delete set null,
+  winner_source text null check (winner_source in ('buzz', 'host')),
   winner_received_at timestamptz null,
-  closed_at timestamptz null
+  closed_at timestamptz null,
+  check (
+    (winner_player_id is null and winner_source is null)
+    or
+    (winner_player_id is not null and winner_source is not null)
+  )
 );
 
 create table buzz_attempts (

@@ -18,7 +18,7 @@ Software synchronizes state and arbitration; host owns comedic judgment and scor
 
 ## D-005 - Server decides first buzz
 Status: accepted.
-Atomic server/database acceptance order determines the winner; client timestamps are not trusted.
+Atomic server/database acceptance order determines the normal winner; client timestamps are not trusted.
 
 ## D-006 - Web first
 Status: accepted.
@@ -51,3 +51,11 @@ Score changes are append-only and classified as correct, bonus, penalty or manua
 ## D-013 - Answer variants and host notes are snapshot content
 Status: accepted.
 Acceptable answer examples and private host notes are stored with the source question and copied into the immutable live question snapshot.
+
+## D-014 - Host can override the buzz winner
+Status: accepted.
+Server arbitration is the normal path, but the host can replace/assign a winner when a device or connection fails. Winner source is recorded as `buzz` or `host` so recovery does not erase provenance.
+
+## D-015 - Selecting a question does not reveal it
+Status: accepted.
+A live question can be preloaded privately for the host. Shared Display/players see learner-facing text/images only after `stimulus_revealed` is explicitly enabled.
