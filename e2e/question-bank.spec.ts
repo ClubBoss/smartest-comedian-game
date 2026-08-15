@@ -76,7 +76,7 @@ test("text question persists hints, variants, tags and metadata", async ({ reque
   expect(saved.hostNotes).toBe("Let them argue before the first hint.");
 });
 
-test("image-led question uploads private photos and preserves reorder", async ({ request }) => {
+test("image-led question uploads private photos, preserves reorder and retains removed media", async ({ request }) => {
   const create = await saveQuestion(
     request,
     {
@@ -123,6 +123,29 @@ test("image-led question uploads private photos and preserves reorder", async ({
   ({ questions } = await listQuestions(request));
   saved = questions.find((question) => question.id === id)!;
   expect(saved.assets.map((asset) => asset.altText)).toEqual(["Second photo", "First photo"]);
+
+  const removedAsset = saved.assets[1];
+  expect(removedAsset.previewUrl).not.toBeNull();
+  const removeFromSource = await saveQuestion(request, {
+    id,
+    prompt: "",
+    answer: "The second image",
+    status: "ready",
+    hints: ["Compare the details"],
+    tags: ["photo"],
+    assets: [
+      { kind: "existing", storagePath: saved.assets[0].storagePath, mimeType: saved.assets[0].mimeType, altText: "Second photo", caption: "B" },
+    ],
+  });
+  expect(removeFromSource.ok()).toBeTruthy();
+
+  const oldMediaStillExists = await request.get(removedAsset.previewUrl!);
+  expect(oldMediaStillExists.ok()).toBeTruthy();
+
+  ({ questions } = await listQuestions(request));
+  saved = questions.find((question) => question.id === id)!;
+  expect(saved.assets).toHaveLength(1);
+  expect(saved.assets[0].altText).toBe("Second photo");
 });
 
 test("question requires learner-facing text or image", async ({ request }) => {
