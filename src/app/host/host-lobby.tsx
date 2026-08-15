@@ -12,7 +12,7 @@ const CURRENT_ROOM_KEY = "smartest-host-current-room";
 
 function shouldIgnoreHotkey(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName);
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
 export function HostLobby() {
