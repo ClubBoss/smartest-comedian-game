@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 const ADMIN_KEY_STORAGE = "smartest-question-bank-admin-key";
 
 type QuestionStatus = "draft" | "ready" | "archived";
+type QuestionView = "active" | "archive";
 
 type ExistingAsset = {
   kind: "existing";
@@ -135,13 +136,19 @@ function statusLabel(status: QuestionStatus) {
   return status === "ready" ? "Ready" : status === "archived" ? "Archived" : "Draft";
 }
 
+function questionLabel(question: QuestionRecord) {
+  const label = question.prompt?.trim() || "Image-led question";
+  return label.length > 80 ? `${label.slice(0, 77)}...` : label;
+}
+
 export function QuestionBank() {
   const [adminKey, setAdminKey] = useState("");
   const [keyInput, setKeyInput] = useState("");
   const [questions, setQuestions] = useState<QuestionRecord[]>([]);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | QuestionStatus>("all");
+  const [view, setView] = useState<QuestionView>("active");
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "ready">("all");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -190,10 +197,17 @@ export function QuestionBank() {
     }
   }
 
+  const activeCount = useMemo(() => questions.filter((question) => question.status !== "archived").length, [questions]);
+  const archivedCount = questions.length - activeCount;
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return questions.filter((question) => {
-      if (statusFilter !== "all" && question.status !== statusFilter) return false;
+      if (view === "archive") {
+        if (question.status !== "archived") return false;
+      } else {
+        if (question.status === "archived") return false;
+        if (statusFilter !== "all" && question.status !== statusFilter) return false;
+      }
       if (!needle) return true;
       const haystack = [
         question.prompt,
@@ -204,7 +218,7 @@ export function QuestionBank() {
       ].filter(Boolean).join(" ").toLowerCase();
       return haystack.includes(needle);
     });
-  }, [questions, query, statusFilter]);
+  }, [questions, query, statusFilter, view]);
 
   async function saveEditor(nextEditor = editor) {
     if (!nextEditor || !adminKey) return false;
@@ -279,7 +293,34 @@ export function QuestionBank() {
   async function quickStatus(question: QuestionRecord, status: QuestionStatus) {
     const draft = editorFromRecord(question);
     draft.status = status;
-    await saveEditor(draft);
+    const saved = await saveEditor(draft);
+    if (saved) setNotice(status === "archived" ? "Question moved to Archive." : "Question restored to Questions.");
+  }
+
+  async function deleteQuestion(question: QuestionRecord) {
+    if (!adminKey || busy || question.status !== "archived") return;
+    const confirmed = window.confirm(
+      `Permanently delete “${questionLabel(question)}”? This cannot be undone. Played-question snapshots are kept.`,
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/questions/${question.id}`, {
+        method: "DELETE",
+        headers: { "x-question-bank-key": adminKey },
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not delete question.");
+      setQuestions((current) => current.filter((item) => item.id !== question.id));
+      setNotice("Question permanently deleted.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete question.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function addImages(files: FileList | null) {
@@ -437,23 +478,30 @@ export function QuestionBank() {
       <div className="split-heading">
         <div>
           <p className="eyebrow">Content admin</p>
-          <h1>Question Bank</h1>
-          <p className="muted">{questions.length} saved questions. Changes here require no code change or deployment.</p>
+          <h1>{view === "archive" ? "Question Archive" : "Question Bank"}</h1>
+          <p className="muted">{activeCount} active questions · {archivedCount} archived. Changes here require no code change or deployment.</p>
         </div>
         <div className="question-bank-actions">
+          <button className={view === "active" ? "primary" : "secondary"} onClick={() => { setView("active"); setStatusFilter("all"); }}>Questions ({activeCount})</button>
+          <button className={view === "archive" ? "primary" : "secondary"} onClick={() => setView("archive")}>Archive ({archivedCount})</button>
           <button className="secondary" onClick={() => void loadQuestions(adminKey)} disabled={loading}>Refresh</button>
-          <button className="primary" onClick={() => { setError(null); setNotice(null); setEditor(emptyEditor()); }}>New question</button>
+          <button className="primary" onClick={() => { setView("active"); setError(null); setNotice(null); setEditor(emptyEditor()); }}>New question</button>
         </div>
       </div>
 
       <section className="card question-filters">
-        <input aria-label="Search questions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search question, answer, tag..." />
-        <select aria-label="Filter status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | QuestionStatus)}>
-          <option value="all">All statuses</option>
-          <option value="ready">Ready</option>
-          <option value="draft">Draft</option>
-          <option value="archived">Archived</option>
-        </select>
+        <input aria-label="Search questions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={view === "archive" ? "Search archived questions..." : "Search question, answer, tag..."} />
+        {view === "active" ? (
+          <select aria-label="Filter status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | "draft" | "ready")}>
+            <option value="all">All active statuses</option>
+            <option value="ready">Ready</option>
+            <option value="draft">Draft</option>
+          </select>
+        ) : (
+          <select aria-label="Filter status" value="archived" disabled>
+            <option value="archived">Archived only</option>
+          </select>
+        )}
       </section>
 
       {notice ? <p className="notice">{notice}</p> : null}
@@ -477,16 +525,25 @@ export function QuestionBank() {
             </div>
             {question.assets[0]?.previewUrl ? <Image className="question-thumb" src={question.assets[0].previewUrl} alt={question.assets[0].altText ?? "Question preview"} width={180} height={110} unoptimized /> : null}
             <div className="question-card-actions">
-              <button className="secondary" onClick={() => { setError(null); setNotice(null); setEditor(editorFromRecord(question)); }}>Edit</button>
-              {question.status === "archived" ? (
-                <button className="secondary" disabled={busy} onClick={() => void quickStatus(question, "draft")}>Unarchive</button>
+              {view === "active" ? (
+                <>
+                  <button className="secondary" onClick={() => { setError(null); setNotice(null); setEditor(editorFromRecord(question)); }}>Edit</button>
+                  <button className="secondary" disabled={busy} onClick={() => void quickStatus(question, "archived")}>Archive</button>
+                </>
               ) : (
-                <button className="secondary" disabled={busy} onClick={() => void quickStatus(question, "archived")}>Archive</button>
+                <>
+                  <button className="secondary" disabled={busy} onClick={() => void quickStatus(question, "draft")}>Restore</button>
+                  <button className="secondary" disabled={busy} onClick={() => void deleteQuestion(question)}>Delete permanently</button>
+                </>
               )}
             </div>
           </article>
         ))}
-        {!loading && filtered.length === 0 ? <div className="card center"><p className="muted compact">No matching questions.</p></div> : null}
+        {!loading && filtered.length === 0 ? (
+          <div className="card center">
+            <p className="muted compact">{view === "archive" ? "No matching archived questions." : "No matching active questions."}</p>
+          </div>
+        ) : null}
       </section>
 
       <button className="question-lock" onClick={() => {
