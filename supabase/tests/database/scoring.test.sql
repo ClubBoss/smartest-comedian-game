@@ -1,10 +1,11 @@
 begin;
 
-select plan(19);
+select plan(20);
 
 select has_function('public', 'resolve_answer_score_atomic', array['uuid', 'uuid', 'uuid', 'integer'], 'answer score RPC exists');
 select has_function('public', 'add_manual_score_atomic', array['uuid', 'uuid', 'integer', 'text'], 'manual score RPC exists');
 select has_function('public', 'undo_latest_score_atomic', array['uuid'], 'undo score RPC exists');
+select has_column('public', 'score_events', 'event_seq', 'score events have deterministic causal ordering');
 
 insert into rooms (code, host_secret_hash, capacity) values ('SCORE2', 'hash', 2);
 select * from join_room_atomic('SCORE2', 'One', 'duck', 'token-1');
