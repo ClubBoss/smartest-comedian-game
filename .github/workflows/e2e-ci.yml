@@ -20,12 +20,14 @@ jobs:
       - run: npm install
       - run: npx playwright install --with-deps chromium
       - name: Start minimal Supabase stack
-        run: supabase start -x gotrue,realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+        run: supabase start -x realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
       - run: supabase db reset
       - name: Export local Supabase environment
         shell: bash
         run: |
           eval "$(supabase status -o env)"
+          : "${ANON_KEY:?Supabase local ANON_KEY is missing}"
+          : "${SERVICE_ROLE_KEY:?Supabase local SERVICE_ROLE_KEY is missing}"
           echo "NEXT_PUBLIC_SUPABASE_URL=${API_URL:-http://127.0.0.1:54321}" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
           echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
