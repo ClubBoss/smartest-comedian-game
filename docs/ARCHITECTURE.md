@@ -3,45 +3,25 @@
 ## Recommended stack
 
 - Frontend: Next.js + React + TypeScript.
-- Styling: Tailwind CSS or equivalent minimal utility layer.
 - Backend/data: Supabase Postgres.
 - Realtime: Supabase Realtime.
+- Media: Supabase Storage for question images and optional custom buzzer audio.
 - Auth: anonymous/player session token + protected host secret; full account system deferred.
-- Validation: Zod.
 - Tests: Vitest for domain logic, Playwright for multi-client flows.
-- Hosting: Vercel/Cloudflare-compatible web deployment; backend hosted separately in Supabase.
 
-## Why this stack
+## Architectural principles
 
-- Realtime room state with minimal infrastructure.
-- Postgres fits persistent Question Bank and audit log cleanly.
-- Web-first join friction is near zero.
-- Easy to evolve from private home tool to reusable party-game product.
+- Host authority is explicit and recoverable.
+- Realtime notifications are not source of truth; Postgres state is canonical.
+- Question content is separate from live question snapshots.
+- Buzzer ordering is server-authoritative in the normal path, with auditable host override for recovery.
+- Eligibility resets on every new buzz cycle; no wrong-answer lockout carries forward.
+- Scoring is append-only and supports zero-value answer events.
+- Normal answer scoring is traceable to the exact buzz cycle it resolved.
+- Media failure cannot corrupt game state.
+- Preloading a question is private until the host reveals its learner-facing stimulus.
 
-## Logical modules
-
-### `room`
-Room lifecycle, capacity, host authority, player membership.
-
-### `buzzer`
-Buzz cycle IDs, atomic first-winner claim, reset/reopen.
-
-### `scoring`
-Append-only score transactions and derived totals.
-
-### `questions`
-Question Bank CRUD, hints, metadata, search/filter.
-
-### `game`
-Current question snapshot, reveal state, phase transitions.
-
-### `presence`
-Connection/reconnect indicators. Presence is advisory; persistent room/player data remains in Postgres.
-
-### `audio`
-Client-side sound registry and winner playback.
-
-## Data model
+## Core tables
 
 ### rooms
 - id UUID PK
@@ -58,7 +38,10 @@ Client-side sound registry and winner playback.
 - id UUID PK
 - room_id UUID FK
 - display_name TEXT
-- sound_key TEXT
+- sound_type TEXT: builtin | custom
+- sound_key TEXT NULL
+- custom_sound_path TEXT NULL
+- custom_sound_mime_type TEXT NULL
 - seat_order INT
 - reconnect_token_hash TEXT
 - removed_at TIMESTAMPTZ NULL
@@ -68,17 +51,20 @@ Client-side sound registry and winner playback.
 - id UUID PK
 - room_id UUID FK
 - player_id UUID FK
-- delta INT
+- buzz_cycle_id UUID NULL FK
+- kind TEXT: answer | manual
+- delta INT (including zero)
 - reason TEXT NULL
 - reverted_event_id UUID NULL
 - created_at TIMESTAMPTZ
 
-Total score = sum(active score events). This gives safe undo and auditability.
+Normal `answer` events reference the buzz cycle being resolved. `manual` events may omit it. Totals are derived by summing non-reverted events. A zero-value `answer` event records host resolution without changing the total.
 
 ### questions
 - id UUID PK
-- prompt TEXT
+- prompt TEXT NULL
 - answer TEXT
+- answer_variants JSONB
 - explanation TEXT NULL
 - host_notes TEXT NULL
 - category TEXT NULL
@@ -89,25 +75,38 @@ Total score = sum(active score events). This gives safe undo and auditability.
 - created_at TIMESTAMPTZ
 - updated_at TIMESTAMPTZ
 
+Application validation requires a prompt or at least one image asset.
+
 ### question_hints
-- id UUID PK
-- question_id UUID FK
-- position INT
-- text TEXT
+Ordered reusable hints.
+
+### question_assets
+Ordered media assets. V1 `asset_type=image`; storage path + mime/dimensions/alt/caption metadata are persistent content.
 
 ### question_tags
-- question_id UUID FK
-- tag TEXT
+Reusable free-form tags.
+
+### room_question_queue
+- id UUID PK
+- room_id UUID FK
+- question_id UUID NULL FK
+- position INT
+- state TEXT: queued | played | skipped
+- added_at TIMESTAMPTZ
 
 ### question_sessions
-Snapshot used for one live round:
+Immutable live-round snapshot:
 - id UUID PK
 - room_id UUID FK
 - source_question_id UUID NULL
-- prompt_snapshot TEXT
+- prompt_snapshot TEXT NULL
 - answer_snapshot TEXT
+- answer_variants_snapshot JSONB
 - explanation_snapshot TEXT NULL
+- host_notes_snapshot TEXT NULL
 - hints_snapshot JSONB
+- assets_snapshot JSONB
+- stimulus_revealed BOOLEAN
 - revealed_hint_count INT
 - answer_revealed BOOLEAN
 - started_at TIMESTAMPTZ
@@ -116,34 +115,48 @@ Snapshot used for one live round:
 ### buzz_cycles
 - id UUID PK
 - room_id UUID FK
-- question_session_id UUID FK
+- question_session_id UUID NULL FK
 - opened_at TIMESTAMPTZ
 - winner_player_id UUID NULL
+- winner_source TEXT NULL: buzz | host
 - winner_received_at TIMESTAMPTZ NULL
 - closed_at TIMESTAMPTZ NULL
 
-## Atomic buzz
+A question may create many buzz cycles. Each cycle starts with every active player eligible again.
 
-Implement as a server-side Postgres RPC/function similar to:
+### buzz_attempts
+- id UUID PK
+- buzz_cycle_id UUID FK
+- player_id UUID FK
+- received_at TIMESTAMPTZ
+- unique(cycle, player)
 
-1. Validate player belongs to room.
-2. Validate requested cycle is current and open.
-3. `UPDATE buzz_cycles SET winner_player_id = $player, winner_received_at = now(), closed_at = now() WHERE id = $cycle AND winner_player_id IS NULL AND closed_at IS NULL RETURNING ...`.
-4. One caller gets a row; all later callers get no winner.
+The uniqueness is cycle-scoped only. The same player may submit again in the next cycle of the same question.
 
-This avoids double winners without trusting device time.
+## Atomic buzz flow
+
+1. Validate player belongs to room and current cycle is open.
+2. Record one server-received attempt for that player in this cycle.
+3. Atomically set winner with `winner_source=buzz` only if cycle has no winner.
+4. Close/lock the cycle after a winner is accepted.
+5. Host resolves the answer and records `+1`, `0`, or `-1` against that `buzz_cycle_id`, or uses a manual arbitrary score when needed.
+6. Host can explicitly override winner with `winner_source=host` as recovery.
+7. If the question continues, create a brand-new cycle. No prior-answer exclusion is carried forward.
+
+## Question/media flow
+
+- Host can queue and preload a question without learner disclosure.
+- Starting creates an immutable snapshot.
+- `stimulus_revealed` controls shared text/image visibility.
+- Hints and answer have separate reveal state.
+- Source edits never mutate the snapshot.
+- Media/audio failures degrade gracefully and do not alter canonical game state.
 
 ## Security model
 
 - Public room code is not host authority.
 - Host mutation calls require host secret/session.
-- Player mutation limited to own join/reconnect/buzz actions.
-- Score/question/phase mutations host-only.
-- Database RLS or server-only mutation endpoints enforce authority.
-
-## Resilience
-
-- Realtime messages are notifications, not source of truth.
-- On reconnect, clients re-fetch canonical state.
-- Audio is best-effort and decoupled from buzz acceptance.
-- Host actions should expose recovery controls: reset buzzer, manual score adjustment, remove player, return to lobby.
+- Player mutation limited to own join/reconnect/buzz/sound actions.
+- Score/question/media/queue/reveal/override/phase mutations are host-only except permitted custom buzzer upload.
+- Host-only answer variants/notes require protected reads.
+- RLS or server-only endpoints enforce authority.

@@ -1,110 +1,77 @@
 # Roadmap
 
 ## Phase 0 - Foundation
-Goal: repository and contracts are stable before feature work.
+- Product/architecture authority.
+- Next.js/TypeScript/CI shell.
+- Core schema including 2..10 capacity, question images, custom sounds, +1/0/-1/manual scoring, queue, buzz attempts and immutable question snapshots.
 
-Deliverables:
-- Product Contract.
-- Architecture decision.
-- CI skeleton.
-- Environment/config contract.
-- Basic app shell.
-
-Exit gate:
-- Build, lint, typecheck and baseline tests pass.
+Exit: build/lint/typecheck/tests green.
 
 ## Phase 1 - Room + Lobby
-Goal: 2-10 people can reliably enter one room.
-
-Deliverables:
-- Host creates room and chooses capacity 2..10.
-- Room code + QR.
-- Player join/name/sound selection.
-- Host lobby roster.
-- Shared display lobby.
+- Host creates room capacity 2..10.
+- QR/code join.
+- Name + distinct built-in/custom buzzer sound.
 - Reconnect identity.
+- Host/Display lobby.
 
-Exit gate:
-- Automated E2E for 2, 8 and 10 players.
+Exit: 2/8/10-player E2E.
 
 ## Phase 2 - Realtime Buzzer
-Goal: trustworthy live buzz arbitration.
+- Open/close/reset/reopen cycles.
+- Server-atomic winner.
+- Attempt logging.
+- Same-player eligibility restored on every new cycle.
+- Host winner override for recovery.
+- Winner-specific sound.
+- 10-client concurrency stress.
 
-Deliverables:
-- Host open/close/reset.
-- Atomic first-winner RPC.
-- Player button states.
-- Winner broadcast/display.
-- Winner sound.
-- Concurrency test with 10 clients.
-
-Exit gate:
-- Repeated simultaneous-buzz tests never produce multiple winners.
+Exit: no multi-winner; repeated cycles permit any active player to buzz again.
 
 ## Phase 3 - Scoreboard
-Goal: host can run a full question cycle manually.
+- Append-only answer/manual score events.
+- Default +1 / 0 / -1 resolution.
+- Manual arbitrary integer delta + optional reason.
+- Undo.
+- Adaptive 2-10 TV scoreboard.
 
-Deliverables:
-- Live score totals.
-- Quick +/- controls.
-- Custom delta.
-- Append-only score events.
-- Undo last score change.
-- Dynamic display layout for 2-10.
-
-Exit gate:
-- Score remains correct across refresh/reconnect.
+Exit: canonical totals and zero-value resolutions survive refresh/reconnect.
 
 ## Phase 4 - Question Bank
-Goal: questions/hints/answers are managed as content, not code.
+- Text/photo questions.
+- Ordered images and hints.
+- Answer + acceptable variants + explanation + host notes.
+- Categories/tags/difficulty/source/status.
+- Search/filter/archive.
+- Ordered room question queue.
 
-Deliverables:
-- Question CRUD.
-- Ordered hints.
-- Answer/explanation/host notes.
-- Categories/tags/status.
-- Search/filter.
-- Archive/unarchive.
-
-Exit gate:
-- Host can create a new question in UI and use it immediately without deploy.
+Exit: host creates photo question and queues it without deploy.
 
 ## Phase 5 - Live Question Controller
-Goal: question content integrates with the room without over-automating hosting.
+- Start queued/manual question privately.
+- Immutable text/media/answer-variant/host-note snapshot.
+- Explicit reveal of prompt/images/hints/answer.
+- Multiple buzz cycles per question with full re-eligibility each time.
+- Score answer then reopen/continue as many times as host wants.
+- Skip/advance queue.
 
-Deliverables:
-- Select saved question.
-- Create immutable round snapshot.
-- Show/hide prompt on Display.
-- Reveal hints one at a time.
-- Reveal answer/explanation.
-- Advance to next question.
-
-Exit gate:
-- Complete V1 acceptance scenario passes.
+Exit: complete V1 acceptance scenario.
 
 ## Phase 6 - Polish + Home Gauntlet
-Goal: reliable one-evening experience.
-
-Deliverables:
-- Mobile ergonomic pass.
-- TV readability pass.
-- Connection-state indicators.
-- Audio fallback/mute.
+- Mobile ergonomics / TV readability.
+- Connection indicators.
+- Audio/media fallback.
 - Host recovery controls.
-- Browser compatibility smoke.
 - 2/8/10-player scripted gauntlets.
+- Refresh/reconnect, photo, custom sound, repeated same-player answers and simultaneous-buzz stress.
 
-Exit gate:
-- One full simulated game can run end-to-end with no manual database intervention.
+Exit: full simulated evening needs no database intervention.
 
 ## Post-V1 candidates
-Only after real home-session evidence:
-- Question packs/import/export.
-- Multiple scoring presets.
-- Lock-out after wrong answer and reopen to remaining players.
+Only after home-session evidence:
 - Timer.
-- Double points / steal / penalty presets.
-- Host soundboard.
-- Round history.
-- Game templates beyond Smartest Comedian.
+- Round templates.
+- Double-points/steal presets.
+- Host soundboard/jingles.
+- Question import/export packs.
+- More media types such as video.
+- Public accounts/history/analytics.
