@@ -1,4 +1,5 @@
 import { isBuiltinSoundKey } from "@/domain/sounds";
+import { broadcastRoomRefresh } from "@/lib/room-events";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createOpaqueToken, hashToken } from "@/lib/tokens";
 
@@ -14,6 +15,7 @@ export async function POST(
   { params }: { params: Promise<{ code: string }> },
 ) {
   const { code: rawCode } = await params;
+  const code = rawCode.trim().toUpperCase();
   let body: { displayName?: unknown; soundKey?: unknown };
 
   try {
@@ -36,7 +38,7 @@ export async function POST(
   const reconnectToken = createOpaqueToken();
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.rpc("join_room_atomic", {
-    p_code: rawCode.trim().toUpperCase(),
+    p_code: code,
     p_display_name: displayName,
     p_sound_key: soundKey,
     p_reconnect_token_hash: hashToken(reconnectToken),
@@ -62,6 +64,7 @@ export async function POST(
     return Response.json({ error: "Could not join room." }, { status: 500 });
   }
 
+  await broadcastRoomRefresh(code);
   return Response.json({
     playerId: joined.player_id,
     seatOrder: joined.seat_number,

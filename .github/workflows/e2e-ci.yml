@@ -20,7 +20,7 @@ jobs:
       - run: npm install
       - run: npx playwright install --with-deps chromium
       - name: Start minimal Supabase stack
-        run: supabase start -x realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+        run: supabase start -x imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
       - run: supabase db reset
       - name: Export local Supabase environment
         shell: bash

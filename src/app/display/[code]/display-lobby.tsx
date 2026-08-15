@@ -1,31 +1,27 @@
 "use client";
 
 import { QrCode } from "@/components/qr-code";
-import type { LobbyState } from "@/domain/lobby";
 import { soundLabel } from "@/domain/sounds";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRoomState } from "@/hooks/use-room-state";
+import { playWinnerCue } from "@/lib/buzzer-audio";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function DisplayLobby({ code }: { code: string }) {
-  const [lobby, setLobby] = useState<LobbyState | null>(null);
-
-  const loadLobby = useCallback(async () => {
-    const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
-    if (response.ok) setLobby(await response.json());
-  }, [code]);
-
-  useEffect(() => {
-    const initial = window.setTimeout(() => void loadLobby(), 0);
-    const timer = window.setInterval(() => void loadLobby(), 1000);
-    return () => {
-      window.clearTimeout(initial);
-      window.clearInterval(timer);
-    };
-  }, [loadLobby]);
+  const { state: lobby } = useRoomState(code);
+  const [soundArmed, setSoundArmed] = useState(false);
+  const lastPlayedCycle = useRef<string | null>(null);
 
   const joinUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
     return `${window.location.origin}/play/${code}`;
   }, [code]);
+
+  useEffect(() => {
+    const buzz = lobby?.buzz;
+    if (!soundArmed || !buzz?.winnerId || lastPlayedCycle.current === buzz.cycleId) return;
+    lastPlayedCycle.current = buzz.cycleId;
+    void playWinnerCue(buzz.winnerSoundType, buzz.winnerSoundKey, buzz.winnerSoundUrl).catch(() => undefined);
+  }, [lobby?.buzz, soundArmed]);
 
   if (!lobby) {
     return <main className="display-shell center"><h1>Room {code}</h1><p>Waiting for room...</p></main>;
@@ -35,15 +31,31 @@ export function DisplayLobby({ code }: { code: string }) {
     <main className="display-shell stack">
       <header className="display-header">
         <div>
-          <p className="eyebrow">Join the game</p>
+          <p className="eyebrow">Room</p>
           <div className="display-code">{lobby.code}</div>
           <p>{lobby.playerCount} / {lobby.capacity} players</p>
         </div>
-        {joinUrl ? <QrCode value={joinUrl} size={180} /> : null}
+        <div className="display-tools">
+          {joinUrl ? <QrCode value={joinUrl} size={150} /> : null}
+          <button className="sound-arm" onClick={() => setSoundArmed(true)} disabled={soundArmed}>
+            {soundArmed ? "Sound enabled" : "Enable sound"}
+          </button>
+        </div>
       </header>
+
+      <section className={`buzz-stage ${lobby.buzz?.status === "open" ? "open" : lobby.buzz?.winnerId ? "locked" : ""}`}>
+        {lobby.buzz?.status === "open" ? (
+          <><p>BUZZERS OPEN</p><strong>GO!</strong></>
+        ) : lobby.buzz?.winnerName ? (
+          <><p>FIRST</p><strong>{lobby.buzz.winnerName}</strong>{lobby.buzz.winnerSource === "host" ? <span>Host override</span> : null}</>
+        ) : (
+          <><p>BUZZER</p><strong>WAITING</strong></>
+        )}
+      </section>
+
       <section className="display-players">
         {lobby.players.map((player) => (
-          <article className="display-player" key={player.id}>
+          <article className={lobby.buzz?.winnerId === player.id ? "display-player active-winner" : "display-player"} key={player.id}>
             <span className="seat">{player.seatOrder}</span>
             <strong>{player.displayName}</strong>
             <span>{player.soundType === "custom" ? "Custom sound" : soundLabel(player.soundKey)}</span>

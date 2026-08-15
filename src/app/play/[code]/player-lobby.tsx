@@ -1,8 +1,8 @@
 "use client";
 
-import type { LobbyState } from "@/domain/lobby";
 import { BUILTIN_SOUNDS, soundLabel } from "@/domain/sounds";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useRoomState } from "@/hooks/use-room-state";
+import { FormEvent, useEffect, useState } from "react";
 
 type Identity = {
   playerId: string;
@@ -15,55 +15,32 @@ type Identity = {
 
 export function PlayerLobby({ code }: { code: string }) {
   const storageKey = `smartest-player-${code}`;
-  const [lobby, setLobby] = useState<LobbyState | null>(null);
+  const { state: lobby, error: roomError, refresh } = useRoomState(code);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [soundKey, setSoundKey] = useState<string>(BUILTIN_SOUNDS[0].key);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-
-  const loadLobby = useCallback(async () => {
-    const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
-    if (!response.ok) {
-      setLobby(null);
-      if (response.status === 404) setError("Room not found.");
-      return;
-    }
-    const next: LobbyState = await response.json();
-    setLobby(next);
-    setError(null);
-    setSoundKey((current) => {
-      if (next.availableSoundKeys.includes(current)) return current;
-      return next.availableSoundKeys[0] ?? current;
-    });
-  }, [code]);
+  const [buzzing, setBuzzing] = useState(false);
 
   useEffect(() => {
-    const initial = window.setTimeout(() => void loadLobby(), 0);
     const raw = localStorage.getItem(storageKey);
-    if (raw) {
-      try {
-        const saved = JSON.parse(raw) as Identity;
-        fetch(`/api/rooms/${code}/reconnect`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(saved),
-        }).then(async (response) => {
-          if (response.ok) setIdentity(await response.json());
-          else localStorage.removeItem(storageKey);
-        });
-      } catch {
-        localStorage.removeItem(storageKey);
-      }
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw) as Identity;
+      fetch(`/api/rooms/${code}/reconnect`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(saved),
+      }).then(async (response) => {
+        if (response.ok) setIdentity(await response.json());
+        else localStorage.removeItem(storageKey);
+      });
+    } catch {
+      localStorage.removeItem(storageKey);
     }
-    return () => window.clearTimeout(initial);
-  }, [code, loadLobby, storageKey]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => void loadLobby(), 1000);
-    return () => window.clearInterval(timer);
-  }, [loadLobby]);
+  }, [code, storageKey]);
 
   async function join(event: FormEvent) {
     event.preventDefault();
@@ -79,10 +56,10 @@ export function PlayerLobby({ code }: { code: string }) {
       if (!response.ok) throw new Error(result.error ?? "Could not join room.");
       setIdentity(result);
       localStorage.setItem(storageKey, JSON.stringify(result));
-      await loadLobby();
+      await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not join room.");
-      await loadLobby();
+      await refresh();
     } finally {
       setBusy(false);
     }
@@ -105,7 +82,7 @@ export function PlayerLobby({ code }: { code: string }) {
       const updated = { ...identity, soundType: "custom" as const, soundKey: null };
       setIdentity(updated);
       localStorage.setItem(storageKey, JSON.stringify(updated));
-      await loadLobby();
+      await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not upload sound.");
     } finally {
@@ -113,21 +90,55 @@ export function PlayerLobby({ code }: { code: string }) {
     }
   }
 
+  async function buzz() {
+    if (!identity || !lobby?.buzz || lobby.buzz.status !== "open") return;
+    setBuzzing(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/rooms/${code}/buzz/claim`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-player-token": identity.reconnectToken,
+        },
+        body: JSON.stringify({ playerId: identity.playerId, cycleId: lobby.buzz.cycleId }),
+      });
+      const result = await response.json();
+      if (!response.ok && response.status !== 409) throw new Error(result.error ?? "Could not submit buzz.");
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not submit buzz.");
+    } finally {
+      setBuzzing(false);
+    }
+  }
+
   if (!lobby) {
-    return <main className="stack narrow"><h1>Room {code}</h1><div className="card">{error ?? "Loading room..."}</div></main>;
+    return <main className="stack narrow"><h1>Room {code}</h1><div className="card">{error ?? roomError ?? "Loading room..."}</div></main>;
   }
 
   if (identity) {
+    const buzzOpen = lobby.buzz?.status === "open";
+    const isWinner = lobby.buzz?.winnerId === identity.playerId;
     return (
       <main className="stack narrow player-controller">
         <div>
           <p className="eyebrow">Room {code}</p>
           <h1>{identity.displayName}</h1>
         </div>
-        <div className="card stack center">
+        <section className="card stack center">
+          <button
+            className={`buzzer-button ${buzzOpen ? "ready" : isWinner ? "winner" : ""}`}
+            disabled={!buzzOpen || buzzing}
+            onClick={() => void buzz()}
+          >
+            {buzzOpen ? (buzzing ? "SENDING..." : "BUZZ") : isWinner ? "FIRST!" : lobby.buzz?.winnerName ? `${lobby.buzz.winnerName} BUZZED` : "WAIT"}
+          </button>
+          <p className="muted compact">Each new buzzer cycle makes everyone eligible again, including the previous respondent.</p>
+        </section>
+        <section className="card stack center">
           <div className="seat-badge">Seat {identity.seatOrder}</div>
           <div className="big-sound">{identity.soundType === "custom" ? "Custom sound" : soundLabel(identity.soundKey)}</div>
-          <p className="muted">Your buzzer button activates in the next phase. Your identity and sound survive refresh.</p>
           <label className="upload-button">
             {uploading ? "Uploading..." : "Upload custom sound"}
             <input
@@ -140,9 +151,9 @@ export function PlayerLobby({ code }: { code: string }) {
               }}
             />
           </label>
-          <p className="tiny muted">MP3, WAV, OGG or M4A, up to 1.5 MB. If upload fails, your current sound stays active.</p>
+          <p className="tiny muted">MP3, WAV, OGG or M4A, up to 1.5 MB. Failed uploads leave your current sound unchanged.</p>
           {error ? <p className="error">{error}</p> : null}
-        </div>
+        </section>
       </main>
     );
   }

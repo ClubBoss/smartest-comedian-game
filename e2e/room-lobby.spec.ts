@@ -98,7 +98,7 @@ test("host UI creates a room and exposes QR lobby", async ({ page }) => {
   await page.goto("/host");
   await page.locator("select").selectOption("2");
   await page.getByRole("button", { name: "Create room" }).click();
-  await expect(page.getByText("Lobby", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Room [A-Z0-9]{6}$/ })).toBeVisible();
   await expect(page.locator(".room-code")).toHaveText(/[A-Z0-9]{6}/);
   await expect(page.getByAltText("Join room QR code")).toBeVisible();
 });
