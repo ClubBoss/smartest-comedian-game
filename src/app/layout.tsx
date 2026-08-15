@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./ev-cycle.css";
+import "./sound-pack.css";
 
 export const metadata: Metadata = {
   title: "Smartest Comedian Game",

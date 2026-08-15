@@ -1,19 +1,24 @@
 "use client";
 
 import { QrCode } from "@/components/qr-code";
+import { HOST_REACTIONS, hostReactionLabel } from "@/domain/reactions";
 import { soundLabel } from "@/domain/sounds";
-import { useRoomPresence, type RoomSoundTest } from "@/hooks/use-room-presence";
+import { useRoomPresence, type RoomReaction, type RoomSoundTest } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
-import { playWinnerCue } from "@/lib/buzzer-audio";
+import { armBuzzerAudio, playWinnerCue } from "@/lib/buzzer-audio";
+import { playHostReaction } from "@/lib/reaction-audio";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export function DisplayLobby({ code }: { code: string }) {
   const { state: lobby } = useRoomState(code);
   const [soundArmed, setSoundArmed] = useState(false);
+  const [soundError, setSoundError] = useState<string | null>(null);
   const [soundTestName, setSoundTestName] = useState<string | null>(null);
+  const [reactionKey, setReactionKey] = useState<string | null>(null);
   const lastPlayedCycle = useRef<string | null>(null);
   const soundTestTimer = useRef<number | null>(null);
+  const reactionTimer = useRef<number | null>(null);
 
   const handleSoundTest = useCallback((payload: RoomSoundTest) => {
     setSoundTestName(payload.displayName);
@@ -24,7 +29,21 @@ export function DisplayLobby({ code }: { code: string }) {
     }
   }, [soundArmed]);
 
-  const { status: realtimeStatus } = useRoomPresence(code, "display", "shared-display", handleSoundTest, { soundArmed });
+  const handleReaction = useCallback((payload: RoomReaction) => {
+    setReactionKey(payload.key);
+    if (reactionTimer.current) window.clearTimeout(reactionTimer.current);
+    reactionTimer.current = window.setTimeout(() => setReactionKey(null), 1800);
+    if (soundArmed) void playHostReaction(payload.key).catch(() => undefined);
+  }, [soundArmed]);
+
+  const { status: realtimeStatus } = useRoomPresence(
+    code,
+    "display",
+    "shared-display",
+    handleSoundTest,
+    { soundArmed },
+    handleReaction,
+  );
 
   const joinUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -33,6 +52,7 @@ export function DisplayLobby({ code }: { code: string }) {
 
   useEffect(() => () => {
     if (soundTestTimer.current) window.clearTimeout(soundTestTimer.current);
+    if (reactionTimer.current) window.clearTimeout(reactionTimer.current);
   }, []);
 
   useEffect(() => {
@@ -42,11 +62,22 @@ export function DisplayLobby({ code }: { code: string }) {
     void playWinnerCue(buzz.winnerSoundType, buzz.winnerSoundKey, buzz.winnerSoundUrl).catch(() => undefined);
   }, [lobby?.buzz, soundArmed]);
 
+  async function enableSound() {
+    setSoundError(null);
+    const armed = await armBuzzerAudio();
+    if (!armed) {
+      setSoundError("This browser blocked game audio. Check the TV browser sound permissions and try again.");
+      return;
+    }
+    setSoundArmed(true);
+  }
+
   if (!lobby) {
     return <main className="display-shell center"><h1>Room {code}</h1><p>Waiting for room...</p></main>;
   }
 
   const question = lobby.question;
+  const reaction = reactionKey ? HOST_REACTIONS.find((item) => item.key === reactionKey) ?? null : null;
 
   return (
     <main className="display-shell stack">
@@ -61,11 +92,19 @@ export function DisplayLobby({ code }: { code: string }) {
         </div>
         <div className="display-tools">
           {joinUrl ? <QrCode value={joinUrl} size={150} /> : null}
-          <button className="sound-arm" onClick={() => setSoundArmed(true)} disabled={soundArmed}>
+          <button className="sound-arm" onClick={() => void enableSound()} disabled={soundArmed}>
             {soundArmed ? "Sound enabled" : "Enable sound"}
           </button>
+          {soundError ? <p className="display-sound-error">{soundError}</p> : null}
         </div>
       </header>
+
+      {reaction ? (
+        <section className="display-reaction" aria-live="polite">
+          <strong aria-hidden="true">{reaction.emoji}</strong>
+          <span>{hostReactionLabel(reaction.key)}</span>
+        </section>
+      ) : null}
 
       {soundTestName ? (
         <section className="buzz-stage locked" aria-live="polite">

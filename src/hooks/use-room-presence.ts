@@ -1,5 +1,6 @@
 "use client";
 
+import type { HostReactionKey } from "@/domain/reactions";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { useEffect, useRef, useState } from "react";
 
@@ -20,6 +21,10 @@ export type RoomSoundTest = {
   soundUrl: string | null;
 };
 
+export type RoomReaction = {
+  key: HostReactionKey;
+};
+
 type PresenceRole = "host" | "display" | "player";
 
 type PresencePayload = {
@@ -34,14 +39,20 @@ export function useRoomPresence(
   id: string | null,
   onSoundTest?: (payload: RoomSoundTest) => void,
   metadata?: { soundArmed?: boolean },
+  onReaction?: (payload: RoomReaction) => void,
 ) {
   const [status, setStatus] = useState<RoomRealtimeStatus>("connecting");
   const [presence, setPresence] = useState<RoomPresence>({ hosts: 0, displays: 0, soundReadyDisplays: 0, players: 0 });
   const soundTestRef = useRef(onSoundTest);
+  const reactionRef = useRef(onReaction);
 
   useEffect(() => {
     soundTestRef.current = onSoundTest;
   }, [onSoundTest]);
+
+  useEffect(() => {
+    reactionRef.current = onReaction;
+  }, [onReaction]);
 
   useEffect(() => {
     if (!code || !role) {
@@ -80,6 +91,9 @@ export function useRoomPresence(
       })
       .on("broadcast", { event: "sound_test" }, ({ payload }) => {
         soundTestRef.current?.(payload as RoomSoundTest);
+      })
+      .on("broadcast", { event: "host_reaction" }, ({ payload }) => {
+        reactionRef.current?.(payload as RoomReaction);
       })
       .subscribe(async (nextStatus) => {
         if (!active) return;

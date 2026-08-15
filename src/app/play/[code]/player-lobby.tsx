@@ -1,8 +1,9 @@
 "use client";
 
-import { BUILTIN_SOUNDS, soundLabel } from "@/domain/sounds";
+import { BUILTIN_SOUNDS, soundEmoji, soundLabel } from "@/domain/sounds";
 import { useRoomPresence } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
+import { playBuiltInCue } from "@/lib/buzzer-audio";
 import { FormEvent, useEffect, useState } from "react";
 
 type Identity = {
@@ -30,6 +31,7 @@ export function PlayerLobby({ code }: { code: string }) {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [soundKey, setSoundKey] = useState<string>(BUILTIN_SOUNDS[0].key);
+  const [previewingSound, setPreviewingSound] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -104,6 +106,19 @@ export function PlayerLobby({ code }: { code: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function previewSound(key: string) {
+    setSoundKey(key);
+    setPreviewingSound(key);
+    try {
+      await playBuiltInCue(key);
+    } catch {
+      // Preview failure should never block choosing or joining with a sound.
+    }
+    window.setTimeout(() => {
+      setPreviewingSound((current) => current === key ? null : current);
+    }, 750);
   }
 
   async function uploadSound(file: File) {
@@ -233,7 +248,7 @@ export function PlayerLobby({ code }: { code: string }) {
         </section>
         <section className="card stack center">
           <div className="seat-badge">Seat {identity.seatOrder}</div>
-          <div className="big-sound">{identity.soundType === "custom" ? "Custom sound" : soundLabel(identity.soundKey)}</div>
+          <div className="big-sound">{identity.soundType === "custom" ? "🎵 Custom sound" : `${soundEmoji(identity.soundKey)} ${soundLabel(identity.soundKey)}`}</div>
           <div className="host-actions">
             <button className={isReady ? "primary" : "secondary"} disabled={readyBusy} onClick={() => void setReady(!isReady)}>
               {readyBusy ? "Saving..." : isReady ? "✓ Ready" : "I'm ready"}
@@ -283,14 +298,20 @@ export function PlayerLobby({ code }: { code: string }) {
                   type="button"
                   key={sound.key}
                   disabled={!available}
+                  aria-label={`${sound.label}${available ? " — tap to preview" : " — already taken"}`}
                   className={soundKey === sound.key ? "sound-choice selected" : "sound-choice"}
-                  onClick={() => setSoundKey(sound.key)}
+                  onClick={() => void previewSound(sound.key)}
                 >
-                  {sound.label}
+                  <span className="sound-choice-emoji" aria-hidden="true">{sound.emoji}</span>
+                  <span className="sound-choice-copy">
+                    <strong>{sound.label}</strong>
+                    <small>{available ? previewingSound === sound.key ? "Playing…" : "Tap to preview" : "Taken"}</small>
+                  </span>
                 </button>
               );
             })}
           </div>
+          <p className="tiny muted">Built-in sounds play locally on your device for preview and use no uploaded audio quota.</p>
         </div>
         <button className="primary" disabled={busy || !displayName.trim() || !lobby.availableSoundKeys.includes(soundKey)}>
           {busy ? "Joining..." : "Join room"}

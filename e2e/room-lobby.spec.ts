@@ -94,6 +94,25 @@ test("custom sound replaces built-in identity only after successful upload", asy
   expect(state.players[0].soundKey).toBeNull();
 });
 
+test("funny sound pack previews and accepts new built-in sounds", async ({ request, page }) => {
+  const room = await createRoom(request, 2);
+
+  await page.goto(`/play/${room.code}`);
+  const goat = page.getByRole("button", { name: "Goat scream — tap to preview" });
+  await expect(goat).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sad trombone — tap to preview" })).toBeVisible();
+  await goat.click();
+  await page.getByPlaceholder("Name").fill("Goat Player");
+  await page.getByRole("button", { name: "Join room" }).click();
+
+  await expect(page.getByText("🐐 Goat scream", { exact: true })).toBeVisible();
+  const stateResponse = await request.get(`/api/rooms/${room.code}`);
+  expect(stateResponse.ok()).toBeTruthy();
+  const state = await stateResponse.json();
+  expect(state.players[0].soundKey).toBe("goat");
+  expect(state.availableSoundKeys).toEqual(expect.arrayContaining(["rooster", "rimshot", "trombone"]));
+});
+
 test("host UI creates a room and exposes QR lobby", async ({ page }) => {
   await page.goto("/host");
   await page.locator("select").selectOption("2");
