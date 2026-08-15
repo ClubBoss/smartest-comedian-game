@@ -13,6 +13,10 @@ alter table public.score_events
     (kind in ('answer', 'manual') and reverted_event_id is null)
   );
 
+alter table public.score_events
+  add constraint score_events_buzz_cycle_fk
+  foreign key (buzz_cycle_id) references public.buzz_cycles(id) on delete set null;
+
 create unique index score_events_one_revert_per_event
   on public.score_events(reverted_event_id)
   where reverted_event_id is not null;
@@ -29,6 +33,7 @@ security definer
 set search_path = public
 as $$
 declare
+  v_active_cycle uuid;
   v_winner uuid;
   v_event_id uuid;
 begin
@@ -36,13 +41,26 @@ begin
     raise exception using errcode = 'P0001', message = 'ERR_INVALID_ANSWER_DELTA';
   end if;
 
+  select r.active_buzz_cycle_id
+    into v_active_cycle
+  from public.rooms r
+  where r.id = p_room_id and r.ended_at is null
+  for update;
+
+  if not found then
+    raise exception using errcode = 'P0001', message = 'ERR_ROOM_NOT_FOUND';
+  end if;
+
+  if v_active_cycle is distinct from p_buzz_cycle_id then
+    raise exception using errcode = 'P0001', message = 'ERR_STALE_CYCLE';
+  end if;
+
   select bc.winner_player_id
     into v_winner
   from public.buzz_cycles bc
   where bc.id = p_buzz_cycle_id
     and bc.room_id = p_room_id
-    and bc.winner_player_id is not null
-  for update;
+    and bc.winner_player_id is not null;
 
   if not found then
     raise exception using errcode = 'P0001', message = 'ERR_BUZZ_NOT_RESOLVABLE';
@@ -89,12 +107,19 @@ as $$
 declare
   v_event_id uuid;
 begin
+  perform 1
+  from public.rooms r
+  where r.id = p_room_id and r.ended_at is null
+  for update;
+
+  if not found then
+    raise exception using errcode = 'P0001', message = 'ERR_ROOM_NOT_FOUND';
+  end if;
+
   if not exists (
     select 1
-    from public.rooms r
-    join public.players p on p.room_id = r.id
-    where r.id = p_room_id
-      and r.ended_at is null
+    from public.players p
+    where p.room_id = p_room_id
       and p.id = p_player_id
       and p.removed_at is null
   ) then
