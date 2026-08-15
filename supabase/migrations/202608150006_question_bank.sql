@@ -24,7 +24,7 @@ create or replace function public.save_question_atomic(
   p_explanation text,
   p_host_notes text,
   p_category text,
-  p_difficulty smallint,
+  p_difficulty integer,
   p_source_label text,
   p_source_url text,
   p_status text,
@@ -91,7 +91,7 @@ begin
   ) values (
     p_question_id, v_prompt, v_answer, coalesce(p_answer_variants, '[]'::jsonb),
     nullif(trim(coalesce(p_explanation, '')), ''), nullif(trim(coalesce(p_host_notes, '')), ''),
-    nullif(trim(coalesce(p_category, '')), ''), p_difficulty,
+    nullif(trim(coalesce(p_category, '')), ''), p_difficulty::smallint,
     nullif(trim(coalesce(p_source_label, '')), ''), nullif(trim(coalesce(p_source_url, '')), ''),
     p_status, now(), now()
   )
@@ -143,5 +143,5 @@ begin
 end;
 $$;
 
-revoke all on function public.save_question_atomic(uuid, text, text, jsonb, text, text, text, smallint, text, text, text, jsonb, jsonb, jsonb) from public;
-grant execute on function public.save_question_atomic(uuid, text, text, jsonb, text, text, text, smallint, text, text, text, jsonb, jsonb, jsonb) to service_role;
+revoke all on function public.save_question_atomic(uuid, text, text, jsonb, text, text, text, integer, text, text, text, jsonb, jsonb, jsonb) from public;
+grant execute on function public.save_question_atomic(uuid, text, text, jsonb, text, text, text, integer, text, text, text, jsonb, jsonb, jsonb) to service_role;

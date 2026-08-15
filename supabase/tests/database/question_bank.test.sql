@@ -2,7 +2,7 @@ begin;
 
 select plan(19);
 
-select has_function('public', 'save_question_atomic', array['uuid','text','text','jsonb','text','text','text','smallint','text','text','text','jsonb','jsonb','jsonb'], 'question save RPC exists');
+select has_function('public', 'save_question_atomic', array['uuid','text','text','jsonb','text','text','text','integer','text','text','text','jsonb','jsonb','jsonb'], 'question save RPC exists');
 select isnt(has_table_privilege('anon', 'public.questions', 'SELECT'), true, 'anon cannot read Question Bank');
 select isnt(has_table_privilege('authenticated', 'public.questions', 'SELECT'), true, 'authenticated clients cannot read answers directly');
 select is((select count(*) from storage.buckets where id = 'question-images' and public = false), 1::bigint, 'private question image bucket exists');
