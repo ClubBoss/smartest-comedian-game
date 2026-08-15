@@ -2,11 +2,18 @@
 
 import { QrCode } from "@/components/qr-code";
 import { soundLabel } from "@/domain/sounds";
+import { useRoomPresence } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
 import { useEffect, useMemo, useState } from "react";
-import { LiveQuestionPanel } from "./live-question-panel";
+import { HostTvPreview } from "./host-tv-preview";
+import { LiveQuestionPanel, type QuestionReadiness } from "./live-question-panel";
 
 const CURRENT_ROOM_KEY = "smartest-host-current-room";
+
+function shouldIgnoreHotkey(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName);
+}
 
 export function HostLobby() {
   const [capacity, setCapacity] = useState(8);
@@ -18,7 +25,10 @@ export function HostLobby() {
   const [manualPlayerId, setManualPlayerId] = useState("");
   const [manualDelta, setManualDelta] = useState(1);
   const [manualReason, setManualReason] = useState("");
+  const [gameMode, setGameMode] = useState(false);
+  const [questionReadiness, setQuestionReadiness] = useState<QuestionReadiness>({ readyQuestions: 0, queued: 0, current: false });
   const { state: lobby, error, refresh } = useRoomState(roomCode);
+  const { status: realtimeStatus, presence } = useRoomPresence(roomCode, roomCode ? "host" : null, "host-console");
 
   useEffect(() => {
     const initial = window.setTimeout(() => {
@@ -28,6 +38,35 @@ export function HostLobby() {
       setHostToken(localStorage.getItem(`smartest-host-${savedCode}`));
     }, 0);
     return () => window.clearTimeout(initial);
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.repeat || shouldIgnoreHotkey(event.target)) return;
+      const key = event.key.toLowerCase();
+      const selector = key === " "
+        ? '[data-host-hotkey="space"]'
+        : key === "1"
+          ? '[data-host-hotkey="1"]'
+          : key === "0"
+            ? '[data-host-hotkey="0"]'
+            : key === "-"
+              ? '[data-host-hotkey="-"]'
+              : key === "h"
+                ? '[data-host-hotkey="h"]'
+                : key === "a"
+                  ? '[data-host-hotkey="a"]'
+                  : key === "n"
+                    ? '[data-host-hotkey="n"]'
+                    : null;
+      if (!selector) return;
+      const button = document.querySelector<HTMLButtonElement>(selector);
+      if (!button || button.disabled) return;
+      event.preventDefault();
+      button.click();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
 
   async function createRoom() {
@@ -133,119 +172,180 @@ export function HostLobby() {
   const winner = lobby.buzz?.winnerId
     ? lobby.players.find((player) => player.id === lobby.buzz?.winnerId) ?? null
     : null;
+  const readyCount = lobby.players.filter((player) => player.isReady).length;
+  const allPlayersReady = lobby.playerCount >= 2 && readyCount === lobby.playerCount;
+  const questionPrepared = questionReadiness.current || questionReadiness.queued > 0 || questionReadiness.readyQuestions > 0;
+  const displayConnected = presence.displays > 0;
+  const displaySoundReady = presence.soundReadyDisplays > 0;
+
+  const nextAction = !lobby.question
+    ? questionReadiness.queued > 0 ? "Preload the next queued question" : "Choose or queue a question"
+    : !lobby.question.stimulusRevealed
+      ? "Show the question on TV"
+      : buzzOpen
+        ? "Wait for the first buzz"
+        : winner && !lobby.buzz?.scoreResolved
+          ? `Score ${winner.displayName}'s answer`
+          : winner && lobby.buzz?.scoreResolved
+            ? "Reopen the buzzer or continue the question"
+            : lobby.question.answerRevealed
+              ? "Finish the question"
+              : "Open the buzzer";
 
   return (
-    <main className="stack host-shell">
-      <div className="split-heading">
-        <div>
-          <p className="eyebrow">Host console</p>
-          <h1>Room {lobby.code}</h1>
-          <p className="muted">{lobby.playerCount} / {lobby.capacity} players joined</p>
-        </div>
-        <button className="secondary" onClick={() => {
-          localStorage.removeItem(CURRENT_ROOM_KEY);
-          setRoomCode(null);
-          setHostToken(null);
-        }}>New room</button>
-      </div>
-
-      {hostToken ? <LiveQuestionPanel code={lobby.code} hostToken={hostToken} onRoomRefresh={refresh} /> : null}
-
-      <section className="card stack host-buzzer-panel">
+    <div className={gameMode ? "host-game-mode" : ""}>
+      <main className="stack host-shell">
         <div className="split-heading">
           <div>
-            <p className="eyebrow">Buzzer</p>
-            <h2>{buzzOpen ? "Open" : buzzLocked ? `${lobby.buzz?.winnerName} buzzed first` : "Ready"}</h2>
+            <p className="eyebrow">Host console</p>
+            <h1>Room {lobby.code}</h1>
+            <p className="muted">{lobby.playerCount} / {lobby.capacity} players joined · {readyCount} ready</p>
           </div>
-          <span className={`status-pill ${buzzOpen ? "live" : ""}`}>{buzzOpen ? "LIVE" : lobby.phase}</span>
-        </div>
-        <div className="host-actions">
-          <button
-            className="primary"
-            disabled={lobby.playerCount < 2 || buzzOpen}
-            onClick={() => void postHost("buzz/open")}
-          >
-            {buzzLocked ? "Open again" : "Open buzzer"}
-          </button>
-          <button className="secondary" disabled={!buzzOpen} onClick={() => void postHost("buzz/close")}>Close</button>
+          <div className="host-actions">
+            <button className={gameMode ? "primary" : "secondary"} onClick={() => setGameMode((value) => !value)}>
+              {gameMode ? "Exit Game Mode" : "Enter Game Mode"}
+            </button>
+            {!gameMode ? <button className="secondary" onClick={() => {
+              localStorage.removeItem(CURRENT_ROOM_KEY);
+              setRoomCode(null);
+              setHostToken(null);
+            }}>New room</button> : null}
+          </div>
         </div>
 
-        {winner ? (
-          <div className="score-winner stack">
+        <section className="host-game-mode-banner">
+          <div><strong>{gameMode ? "Game Mode ON" : "Control Mode"}</strong><p className="muted compact">{gameMode ? "Only the live-flow controls stay prominent. Exit anytime for recovery tools." : "Prepare the room, then switch to Game Mode for the live round."}</p></div>
+          <span className={`status-pill ${realtimeStatus === "realtime" ? "live" : ""}`}>{realtimeStatus === "realtime" ? "Realtime connected" : "Fallback connection"}</span>
+        </section>
+
+        {!gameMode ? (
+          <section className="host-preflight stack" aria-label="Pre-game check">
+            <div className="split-heading"><div><p className="eyebrow">Pre-game check</p><h2>{allPlayersReady && displayConnected && displaySoundReady && questionPrepared ? "Ready to play" : "Finish setup"}</h2></div><strong>{readyCount}/{lobby.playerCount} ready</strong></div>
+            <div className="host-preflight-grid">
+              <div className={`host-preflight-item ${realtimeStatus === "realtime" ? "pass" : "warn"}`}><span>Realtime</span><strong>{realtimeStatus === "realtime" ? "✓" : "Check"}</strong></div>
+              <div className={`host-preflight-item ${displayConnected ? "pass" : "warn"}`}><span>TV Display</span><strong>{displayConnected ? "✓" : "Missing"}</strong></div>
+              <div className={`host-preflight-item ${displaySoundReady ? "pass" : "warn"}`}><span>TV sound</span><strong>{displaySoundReady ? "✓" : "Enable"}</strong></div>
+              <div className={`host-preflight-item ${lobby.playerCount >= 2 ? "pass" : "warn"}`}><span>Players</span><strong>{lobby.playerCount}/2+</strong></div>
+              <div className={`host-preflight-item ${allPlayersReady ? "pass" : "warn"}`}><span>Ready</span><strong>{readyCount}/{lobby.playerCount}</strong></div>
+              <div className={`host-preflight-item ${questionPrepared ? "pass" : "warn"}`}><span>Questions</span><strong>{questionPrepared ? "✓" : "Add"}</strong></div>
+            </div>
+            <p className="tiny muted">Live controller tabs detected: {presence.players}/{lobby.playerCount}. This is diagnostic only; it never blocks the host.</p>
+          </section>
+        ) : null}
+
+        <section className="host-next-action" aria-live="polite">
+          <div><p className="eyebrow">Next action</p><strong>{nextAction}</strong></div>
+          <span className="status-pill">{gameMode ? "LIVE FLOW" : "GUIDANCE"}</span>
+        </section>
+
+        {hostToken ? <LiveQuestionPanel code={lobby.code} hostToken={hostToken} onRoomRefresh={refresh} gameMode={gameMode} onReadinessChange={setQuestionReadiness} /> : null}
+
+        <section className="card stack host-buzzer-panel">
+          <div className="split-heading">
+            <div>
+              <p className="eyebrow">Buzzer</p>
+              <h2>{buzzOpen ? "Open" : buzzLocked ? `${lobby.buzz?.winnerName} buzzed first` : "Ready"}</h2>
+            </div>
+            <span className={`status-pill ${buzzOpen ? "live" : ""}`}>{buzzOpen ? "LIVE" : lobby.phase}</span>
+          </div>
+          <div className="host-actions">
+            <button
+              className={`primary ${buzzLocked ? "next-action" : ""}`}
+              data-host-hotkey="space"
+              disabled={lobby.playerCount < 2 || buzzOpen || !lobby.question?.stimulusRevealed}
+              onClick={() => void postHost("buzz/open")}
+            >
+              {buzzLocked ? "REOPEN BUZZER" : "Open buzzer"}
+            </button>
+            <button className="secondary" disabled={!buzzOpen} onClick={() => void postHost("buzz/close")}>Close</button>
+          </div>
+
+          {winner ? (
+            <div className="score-winner stack">
+              <div className="split-heading">
+                <div>
+                  <p className="eyebrow">Answer score</p>
+                  <h2>{winner.displayName} · {winner.score}</h2>
+                </div>
+                {lobby.buzz?.scoreResolved ? <span className="status-pill">Recorded {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</span> : null}
+              </div>
+              <div className="answer-score-actions">
+                {([-1, 0, 1] as const).map((delta) => (
+                  <button
+                    key={delta}
+                    data-host-hotkey={delta === -1 ? "-" : String(delta)}
+                    className={delta === 1 ? "primary score-button next-action" : "secondary score-button"}
+                    disabled={Boolean(lobby.buzz?.scoreResolved)}
+                    onClick={() => void scoreAnswer(delta)}
+                  >
+                    {delta > 0 ? "+1" : delta}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {!gameMode && lobby.buzz ? (
+            <div className="override-row">
+              <select value={overridePlayerId} onChange={(event) => setOverridePlayerId(event.target.value)}>
+                <option value="">Manual winner...</option>
+                {lobby.players.map((player) => <option key={player.id} value={player.id}>{player.displayName}</option>)}
+              </select>
+              <button className="secondary" disabled={!overridePlayerId} onClick={() => void postHost("buzz/override", { playerId: overridePlayerId })}>Set winner</button>
+            </div>
+          ) : null}
+          {actionError ? <p className="error">{actionError}</p> : null}
+        </section>
+
+        <HostTvPreview lobby={lobby} />
+
+        <section className="host-hotkeys" aria-label="Host keyboard shortcuts">
+          <span><kbd>Space</kbd>open/reopen</span><span><kbd>1</kbd>+1</span><span><kbd>0</kbd>0</span><span><kbd>-</kbd>-1</span><span><kbd>H</kbd>hint</span><span><kbd>A</kbd>answer</span><span><kbd>N</kbd>next/finish</span>
+        </section>
+
+        <div className="host-secondary-admin stack">
+          <section className="card stack">
             <div className="split-heading">
               <div>
-                <p className="eyebrow">Answer score</p>
-                <h2>{winner.displayName} · {winner.score}</h2>
+                <p className="eyebrow">Special scoring</p>
+                <h2>Manual adjustment</h2>
               </div>
-              {lobby.buzz?.scoreResolved ? <span className="status-pill">Recorded {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</span> : null}
+              <button className="secondary" disabled={!lobby.canUndoScore} onClick={() => void postHost("score/undo")}>Undo latest score</button>
             </div>
-            <div className="answer-score-actions">
-              {([-1, 0, 1] as const).map((delta) => (
-                <button
-                  key={delta}
-                  className={delta === 1 ? "primary score-button" : "secondary score-button"}
-                  disabled={Boolean(lobby.buzz?.scoreResolved)}
-                  onClick={() => void scoreAnswer(delta)}
-                >
-                  {delta > 0 ? "+1" : delta}
-                </button>
-              ))}
+            <div className="manual-score-grid">
+              <select value={manualPlayerId} onChange={(event) => setManualPlayerId(event.target.value)}>
+                <option value="">Choose player...</option>
+                {lobby.players.map((player) => <option key={player.id} value={player.id}>{player.displayName} ({player.score})</option>)}
+              </select>
+              <input aria-label="Manual score delta" type="number" step="1" value={manualDelta} onChange={(event) => setManualDelta(Number(event.target.value))} />
+              <input aria-label="Manual score reason" value={manualReason} maxLength={200} onChange={(event) => setManualReason(event.target.value)} placeholder="Reason (optional)" />
+              <button className="secondary" disabled={!manualPlayerId || !Number.isInteger(manualDelta)} onClick={() => void applyManualScore()}>Apply</button>
             </div>
-          </div>
-        ) : null}
+          </section>
 
-        {lobby.buzz ? (
-          <div className="override-row">
-            <select value={overridePlayerId} onChange={(event) => setOverridePlayerId(event.target.value)}>
-              <option value="">Manual winner...</option>
-              {lobby.players.map((player) => <option key={player.id} value={player.id}>{player.displayName}</option>)}
-            </select>
-            <button className="secondary" disabled={!overridePlayerId} onClick={() => void postHost("buzz/override", { playerId: overridePlayerId })}>Set winner</button>
-          </div>
-        ) : null}
-        {actionError ? <p className="error">{actionError}</p> : null}
-      </section>
-
-      <section className="card stack">
-        <div className="split-heading">
-          <div>
-            <p className="eyebrow">Special scoring</p>
-            <h2>Manual adjustment</h2>
-          </div>
-          <button className="secondary" disabled={!lobby.canUndoScore} onClick={() => void postHost("score/undo")}>Undo latest score</button>
-        </div>
-        <div className="manual-score-grid">
-          <select value={manualPlayerId} onChange={(event) => setManualPlayerId(event.target.value)}>
-            <option value="">Choose player...</option>
-            {lobby.players.map((player) => <option key={player.id} value={player.id}>{player.displayName} ({player.score})</option>)}
-          </select>
-          <input aria-label="Manual score delta" type="number" step="1" value={manualDelta} onChange={(event) => setManualDelta(Number(event.target.value))} />
-          <input aria-label="Manual score reason" value={manualReason} maxLength={200} onChange={(event) => setManualReason(event.target.value)} placeholder="Reason (optional)" />
-          <button className="secondary" disabled={!manualPlayerId || !Number.isInteger(manualDelta)} onClick={() => void applyManualScore()}>Apply</button>
-        </div>
-      </section>
-
-      <div className="lobby-grid">
-        <section className="card stack center">
-          {joinUrl ? <QrCode value={joinUrl} /> : null}
-          <div className="room-code">{lobby.code}</div>
-          <p className="muted compact">Scan the QR or open {joinUrl}</p>
-        </section>
-        <section className="card stack">
-          <h2>Scoreboard</h2>
-          {lobby.players.length === 0 ? <p className="muted">Waiting for players...</p> : null}
-          <div className="player-list">
-            {lobby.players.map((player) => (
-              <div className="player-row score-row" key={player.id}>
-                <span className="seat">{player.seatOrder}</span>
-                <strong>{player.displayName}</strong>
-                <strong className="host-score">{player.score}</strong>
-                <span className="sound-pill">{player.soundType === "custom" ? "Custom sound" : soundLabel(player.soundKey)}</span>
+          <div className="lobby-grid">
+            <section className="card stack center">
+              {joinUrl ? <QrCode value={joinUrl} /> : null}
+              <div className="room-code">{lobby.code}</div>
+              <p className="muted compact">Scan the QR or open {joinUrl}</p>
+            </section>
+            <section className="card stack">
+              <h2>Scoreboard</h2>
+              {lobby.players.length === 0 ? <p className="muted">Waiting for players...</p> : null}
+              <div className="player-list">
+                {lobby.players.map((player) => (
+                  <div className="player-row score-row" key={player.id}>
+                    <span className="seat">{player.seatOrder}</span>
+                    <strong>{player.displayName}</strong>
+                    <strong className="host-score">{player.score}</strong>
+                    <span className="sound-pill">{player.isReady ? "✓ Ready" : player.soundType === "custom" ? "Custom sound" : soundLabel(player.soundKey)}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </section>
           </div>
-        </section>
-      </div>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }

@@ -8,6 +8,7 @@ export type RoomRealtimeStatus = "connecting" | "realtime" | "fallback";
 export type RoomPresence = {
   hosts: number;
   displays: number;
+  soundReadyDisplays: number;
   players: number;
 };
 
@@ -24,6 +25,7 @@ type PresenceRole = "host" | "display" | "player";
 type PresencePayload = {
   role?: PresenceRole;
   id?: string | null;
+  soundArmed?: boolean;
 };
 
 export function useRoomPresence(
@@ -31,9 +33,10 @@ export function useRoomPresence(
   role: PresenceRole | null,
   id: string | null,
   onSoundTest?: (payload: RoomSoundTest) => void,
+  metadata?: { soundArmed?: boolean },
 ) {
   const [status, setStatus] = useState<RoomRealtimeStatus>("connecting");
-  const [presence, setPresence] = useState<RoomPresence>({ hosts: 0, displays: 0, players: 0 });
+  const [presence, setPresence] = useState<RoomPresence>({ hosts: 0, displays: 0, soundReadyDisplays: 0, players: 0 });
   const soundTestRef = useRef(onSoundTest);
 
   useEffect(() => {
@@ -44,7 +47,7 @@ export function useRoomPresence(
     if (!code || !role) {
       const clear = window.setTimeout(() => {
         setStatus("connecting");
-        setPresence({ hosts: 0, displays: 0, players: 0 });
+        setPresence({ hosts: 0, displays: 0, soundReadyDisplays: 0, players: 0 });
       }, 0);
       return () => window.clearTimeout(clear);
     }
@@ -62,11 +65,14 @@ export function useRoomPresence(
       .on("presence", { event: "sync" }, () => {
         if (!active) return;
         const raw = channel.presenceState() as unknown as Record<string, PresencePayload[]>;
-        const next: RoomPresence = { hosts: 0, displays: 0, players: 0 };
+        const next: RoomPresence = { hosts: 0, displays: 0, soundReadyDisplays: 0, players: 0 };
         for (const entries of Object.values(raw)) {
           for (const entry of entries) {
             if (entry.role === "host") next.hosts += 1;
-            if (entry.role === "display") next.displays += 1;
+            if (entry.role === "display") {
+              next.displays += 1;
+              if (entry.soundArmed) next.soundReadyDisplays += 1;
+            }
             if (entry.role === "player") next.players += 1;
           }
         }
@@ -79,7 +85,7 @@ export function useRoomPresence(
         if (!active) return;
         if (nextStatus === "SUBSCRIBED") {
           setStatus("realtime");
-          await channel.track({ role, id });
+          await channel.track({ role, id, soundArmed: metadata?.soundArmed ?? false });
           return;
         }
         if (nextStatus === "CHANNEL_ERROR" || nextStatus === "TIMED_OUT" || nextStatus === "CLOSED") {
@@ -95,7 +101,7 @@ export function useRoomPresence(
       window.removeEventListener("offline", onOffline);
       void supabase.removeChannel(channel);
     };
-  }, [code, id, role]);
+  }, [code, id, metadata?.soundArmed, role]);
 
   return { status, presence };
 }
