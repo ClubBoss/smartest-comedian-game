@@ -47,6 +47,7 @@ test("player readiness persists and sound check reaches shared display", async (
   const display = await context.newPage();
   await display.goto(`/display/${room.code}`);
   await expect(display.getByText("Reliability Guest")).toBeVisible();
+  await expect(display.getByText("Display connected")).toBeVisible({ timeout: 10_000 });
   const enableSound = display.getByRole("button", { name: "Enable sound" });
   if (await enableSound.isVisible()) await enableSound.click();
 
@@ -57,10 +58,12 @@ test("player readiness persists and sound check reaches shared display", async (
   await controller.goto(`/play/${room.code}`);
   await expect(controller.getByRole("heading", { name: "Reliability Guest" })).toBeVisible();
   await expect(controller.getByRole("button", { name: "✓ Ready" })).toBeVisible();
+  await expect(controller.getByText("Connected", { exact: true })).toBeVisible({ timeout: 10_000 });
 
   await controller.getByRole("button", { name: "Test sound on TV" }).click();
-  await expect(display.getByText("SOUND CHECK")).toBeVisible({ timeout: 10_000 });
-  await expect(display.getByText("Reliability Guest")).toBeVisible();
+  const soundCheck = display.locator("section").filter({ hasText: "SOUND CHECK" });
+  await expect(soundCheck).toBeVisible({ timeout: 10_000 });
+  await expect(soundCheck.getByText("Reliability Guest", { exact: true })).toBeVisible();
 
   await controller.getByRole("button", { name: "✓ Ready" }).click();
   await expect(controller.getByRole("button", { name: "I'm ready" })).toBeVisible();
