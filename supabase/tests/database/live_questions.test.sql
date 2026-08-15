@@ -1,6 +1,6 @@
 begin;
 
-select plan(34);
+select plan(40);
 
 select has_function('public', 'queue_question_atomic', array['uuid','uuid'], 'queue question RPC exists');
 select has_function('public', 'start_question_atomic', array['uuid','uuid','uuid'], 'start question RPC exists');
