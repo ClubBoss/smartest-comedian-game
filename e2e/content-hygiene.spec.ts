@@ -35,7 +35,8 @@ test("host can remove a stale non-current room from this browser", async ({ page
   await page.getByRole("button", { name: "Create room" }).click();
 
   const roomsPanel = page.locator("details").filter({ hasText: /^Rooms/ });
-  if (!(await roomsPanel.getAttribute("open"))) await roomsPanel.locator("summary").click();
+  const roomsOpen = await roomsPanel.evaluate((element) => (element as HTMLDetailsElement).open);
+  if (!roomsOpen) await roomsPanel.locator("summary").click();
 
   const firstRoomRow = roomsPanel.locator(".split-heading").filter({ hasText: `Room ${firstCode}` });
   await expect(firstRoomRow.getByRole("button", { name: "Remove" })).toBeVisible();
