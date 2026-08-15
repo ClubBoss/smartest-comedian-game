@@ -3,7 +3,7 @@ import { readSupabaseServerEnv } from "./env";
 
 export function getSupabaseAdmin() {
   const env = readSupabaseServerEnv();
-  return createClient(env.url, env.serviceRoleKey, {
+  return createClient(env.url, env.adminKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
