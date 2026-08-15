@@ -30,6 +30,10 @@ function readHistory(): SavedRoom[] {
   }
 }
 
+function nextRecency(rooms: SavedRoom[]): number {
+  return rooms.reduce((maximum, room) => Math.max(maximum, room.lastUsedAt), 0) + 1;
+}
+
 function discoverHostRooms(): string[] {
   const codes: string[] = [];
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -57,9 +61,10 @@ function reconcileHistory(markCurrent: boolean): { rooms: SavedRoom[]; currentCo
   }
   if (currentCode && localStorage.getItem(`${HOST_TOKEN_PREFIX}${currentCode}`)) {
     const existing = byCode.get(currentCode);
+    const snapshot = [...byCode.values()];
     byCode.set(currentCode, {
       code: currentCode,
-      lastUsedAt: markCurrent ? Date.now() : existing?.lastUsedAt ?? Date.now(),
+      lastUsedAt: markCurrent ? nextRecency(snapshot) : existing?.lastUsedAt ?? nextRecency(snapshot),
     });
   }
 
@@ -70,28 +75,42 @@ function reconcileHistory(markCurrent: boolean): { rooms: SavedRoom[]; currentCo
   return { rooms, currentCode };
 }
 
+function rememberRoom(code: string) {
+  const previous = readHistory();
+  const lastUsedAt = nextRecency(previous);
+  const history = previous.filter((room) => room.code !== code);
+  history.unshift({ code, lastUsedAt });
+  localStorage.setItem(ROOM_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_SAVED_ROOMS)));
+}
+
 export function HostRoomManager() {
   const [rooms, setRooms] = useState<SavedRoom[]>([]);
   const [currentCode, setCurrentCode] = useState<string | null>(null);
   const observedCurrent = useRef<string | null>(null);
 
   useEffect(() => {
-    const initial = reconcileHistory(true);
-    observedCurrent.current = initial.currentCode;
-    setRooms(initial.rooms);
-    setCurrentCode(initial.currentCode);
+    let interval: number | null = null;
+    const initial = window.setTimeout(() => {
+      const first = reconcileHistory(true);
+      observedCurrent.current = first.currentCode;
+      setRooms(first.rooms);
+      setCurrentCode(first.currentCode);
 
-    const interval = window.setInterval(() => {
-      const nextCurrent = localStorage.getItem(CURRENT_ROOM_KEY)?.trim().toUpperCase() || null;
-      const changed = nextCurrent !== observedCurrent.current;
-      if (!changed) return;
-      observedCurrent.current = nextCurrent;
-      const next = reconcileHistory(Boolean(nextCurrent));
-      setRooms(next.rooms);
-      setCurrentCode(next.currentCode);
-    }, 500);
+      interval = window.setInterval(() => {
+        const nextCurrent = localStorage.getItem(CURRENT_ROOM_KEY)?.trim().toUpperCase() || null;
+        const changed = nextCurrent !== observedCurrent.current;
+        if (!changed) return;
+        observedCurrent.current = nextCurrent;
+        const next = reconcileHistory(Boolean(nextCurrent));
+        setRooms(next.rooms);
+        setCurrentCode(next.currentCode);
+      }, 500);
+    }, 0);
 
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initial);
+      if (interval !== null) window.clearInterval(interval);
+    };
   }, []);
 
   function openRoom(code: string) {
@@ -102,9 +121,7 @@ export function HostRoomManager() {
       return;
     }
     localStorage.setItem(CURRENT_ROOM_KEY, code);
-    const history = readHistory().filter((room) => room.code !== code);
-    history.unshift({ code, lastUsedAt: Date.now() });
-    localStorage.setItem(ROOM_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_SAVED_ROOMS)));
+    rememberRoom(code);
     window.location.reload();
   }
 
