@@ -72,10 +72,10 @@ begin
   end if;
 
   if not exists (
-    select 1 from public.players
-    where id = p_player_id
-      and room_id = v_room_id
-      and removed_at is null
+    select 1 from public.players p
+    where p.id = p_player_id
+      and p.room_id = v_room_id
+      and p.removed_at is null
   ) then
     raise exception using errcode = 'P0001', message = 'ERR_PLAYER_NOT_ELIGIBLE';
   end if;
@@ -84,20 +84,20 @@ begin
   values (p_cycle_id, p_player_id)
   on conflict (buzz_cycle_id, player_id) do nothing;
 
-  update public.buzz_cycles
+  update public.buzz_cycles as bc
     set winner_player_id = p_player_id,
         winner_source = 'buzz',
         winner_received_at = now(),
         closed_at = now()
-  where id = p_cycle_id
-    and winner_player_id is null
-    and closed_at is null
-  returning public.buzz_cycles.winner_player_id into v_winner;
+  where bc.id = p_cycle_id
+    and bc.winner_player_id is null
+    and bc.closed_at is null
+  returning bc.winner_player_id into v_winner;
 
   if v_winner is not null then
-    update public.rooms
+    update public.rooms as r
       set phase = 'BUZZ_LOCKED'
-    where id = v_room_id and active_buzz_cycle_id = p_cycle_id;
+    where r.id = v_room_id and r.active_buzz_cycle_id = p_cycle_id;
     return query select true, v_winner;
     return;
   end if;
@@ -164,10 +164,10 @@ begin
   end if;
 
   if not exists (
-    select 1 from public.players
-    where id = p_player_id
-      and room_id = p_room_id
-      and removed_at is null
+    select 1 from public.players p
+    where p.id = p_player_id
+      and p.room_id = p_room_id
+      and p.removed_at is null
   ) then
     raise exception using errcode = 'P0001', message = 'ERR_PLAYER_NOT_ELIGIBLE';
   end if;
