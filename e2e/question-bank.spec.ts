@@ -6,20 +6,38 @@ const ONE_PIXEL_PNG = Buffer.from(
   "base64",
 );
 
+type ListedAsset = {
+  storagePath: string;
+  mimeType: string;
+  altText: string | null;
+  previewUrl: string | null;
+};
+
+type ListedQuestion = {
+  id: string;
+  prompt: string | null;
+  answer: string;
+  answerVariants: string[];
+  hostNotes: string | null;
+  status: "draft" | "ready" | "archived";
+  hints: string[];
+  tags: string[];
+  assets: ListedAsset[];
+};
+
 async function listQuestions(request: APIRequestContext) {
   const response = await request.get("/api/questions", {
     headers: { "x-question-bank-key": ADMIN_KEY },
   });
   expect(response.ok()).toBeTruthy();
-  return response.json() as Promise<{ questions: Array<any> }>;
+  return response.json() as Promise<{ questions: ListedQuestion[] }>;
 }
 
 async function saveQuestion(request: APIRequestContext, payload: object, files: Record<string, { name: string; mimeType: string; buffer: Buffer }> = {}) {
-  const response = await request.post("/api/questions", {
+  return request.post("/api/questions", {
     headers: { "x-question-bank-key": ADMIN_KEY },
     multipart: { payload: JSON.stringify(payload), ...files },
   });
-  return response;
 }
 
 test.describe.configure({ mode: "serial" });
@@ -49,7 +67,7 @@ test("text question persists hints, variants, tags and metadata", async ({ reque
   const { id } = await response.json();
 
   const { questions } = await listQuestions(request);
-  const saved = questions.find((question) => question.id === id);
+  const saved = questions.find((question) => question.id === id)!;
   expect(saved.prompt).toBe("Why did the old sign use a strange color?");
   expect(saved.answerVariants).toEqual(["the pigment aged", "color degradation"]);
   expect(saved.hints).toEqual(["Think chemistry", "Think age"]);
@@ -81,7 +99,7 @@ test("image-led question uploads private photos and preserves reorder", async ({
   const { id } = await create.json();
 
   let { questions } = await listQuestions(request);
-  let saved = questions.find((question) => question.id === id);
+  let saved = questions.find((question) => question.id === id)!;
   expect(saved.prompt).toBeNull();
   expect(saved.assets).toHaveLength(2);
   expect(saved.assets[0].altText).toBe("First photo");
@@ -103,8 +121,8 @@ test("image-led question uploads private photos and preserves reorder", async ({
   expect(reorder.ok()).toBeTruthy();
 
   ({ questions } = await listQuestions(request));
-  saved = questions.find((question) => question.id === id);
-  expect(saved.assets.map((asset: { altText: string }) => asset.altText)).toEqual(["Second photo", "First photo"]);
+  saved = questions.find((question) => question.id === id)!;
+  expect(saved.assets.map((asset) => asset.altText)).toEqual(["Second photo", "First photo"]);
 });
 
 test("question requires learner-facing text or image", async ({ request }) => {
@@ -140,7 +158,7 @@ test("owner can archive and unarchive without deleting content", async ({ reques
     assets: [],
   });
   expect(archive.ok()).toBeTruthy();
-  let saved = (await listQuestions(request)).questions.find((question) => question.id === id);
+  let saved = (await listQuestions(request)).questions.find((question) => question.id === id)!;
   expect(saved.status).toBe("archived");
   expect(saved.answer).toBe("Still here");
 
@@ -154,7 +172,7 @@ test("owner can archive and unarchive without deleting content", async ({ reques
     assets: [],
   });
   expect(unarchive.ok()).toBeTruthy();
-  saved = (await listQuestions(request)).questions.find((question) => question.id === id);
+  saved = (await listQuestions(request)).questions.find((question) => question.id === id)!;
   expect(saved.status).toBe("draft");
 });
 
