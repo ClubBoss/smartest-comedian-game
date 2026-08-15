@@ -138,7 +138,14 @@ export function HostRoomManager() {
     if (!confirmed) {
       event.preventDefault();
       event.stopPropagation();
+      return;
     }
+
+    rememberRoom(activeCode);
+    const snapshot = reconcileHistory(false);
+    observedCurrent.current = activeCode;
+    setRooms(snapshot.rooms);
+    setCurrentCode(activeCode);
   }
 
   return (
