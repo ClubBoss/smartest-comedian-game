@@ -29,3 +29,8 @@ Buzz winner is determined atomically by server/database acceptance order. Client
 Status: accepted.
 
 No mandatory native app. Players join by URL/QR with minimal friction.
+
+## D-007 - Core game does not depend on Question Bank
+Status: accepted.
+
+Rooms and buzz cycles may run without a selected question session. The editable Question Bank enhances hosting but must never block manual gameplay.

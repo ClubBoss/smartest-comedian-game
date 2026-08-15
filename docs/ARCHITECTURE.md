@@ -116,7 +116,7 @@ Snapshot used for one live round:
 ### buzz_cycles
 - id UUID PK
 - room_id UUID FK
-- question_session_id UUID FK
+- question_session_id UUID NULL FK
 - opened_at TIMESTAMPTZ
 - winner_player_id UUID NULL
 - winner_received_at TIMESTAMPTZ NULL
