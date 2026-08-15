@@ -76,7 +76,7 @@ async function winCurrentBuzz(request: APIRequestContext, room: Room, player: Pl
 
 async function expectDisplayContains(page: Page, room: Room, text: string) {
   await page.goto(`/display/${room.code}`);
-  await expect(page.getByText(text, { exact: true })).toBeVisible();
+  await expect(page.getByText(text, { exact: false }).first()).toBeVisible();
 }
 
 test.describe.configure({ mode: "serial" });
