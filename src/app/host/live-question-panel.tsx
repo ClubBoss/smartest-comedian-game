@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { HostPackControls } from "./host-pack-controls";
 
 type ReadyQuestion = {
   id: string;
@@ -102,6 +103,12 @@ export function LiveQuestionPanel({
     };
   }, [load]);
 
+  useEffect(() => {
+    const refresh = () => void load().catch(() => undefined);
+    window.addEventListener("smartest-live-question-refresh", refresh);
+    return () => window.removeEventListener("smartest-live-question-refresh", refresh);
+  }, [load]);
+
   const queued = useMemo(
     () => (state?.queue ?? []).filter((item) => item.state === "queued"),
     [state?.queue],
@@ -132,6 +139,7 @@ export function LiveQuestionPanel({
         const messages: Record<string, string> = {
           ERR_QUESTION_ACTIVE: "Finish the current question before starting another one.",
           ERR_QUESTION_NOT_READY: "Only Ready questions can be used in a game.",
+          ERR_QUEUE_ITEM_NOT_FOUND: "That queue item is no longer available.",
           ERR_QUEUE_EMPTY: "The queue is empty.",
           ERR_NO_MORE_HINTS: "All hints are already revealed.",
           ERR_STIMULUS_HIDDEN: "Show the question before this action.",
@@ -232,6 +240,8 @@ export function LiveQuestionPanel({
         </div>
         <button className="secondary" data-host-hotkey="n" disabled={busy || queued.length === 0} onClick={() => void act("start-next")}>Preload next queued</button>
       </div>
+
+      <HostPackControls code={code} hostToken={hostToken} onRoomRefresh={onRoomRefresh} />
 
       <div className="question-picker-row">
         <select value={selectedQuestionId} onChange={(event) => setSelectedQuestionId(event.target.value)}>
