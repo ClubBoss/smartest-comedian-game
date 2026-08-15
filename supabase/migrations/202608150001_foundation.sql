@@ -42,6 +42,7 @@ create table score_events (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references rooms(id) on delete cascade,
   player_id uuid not null references players(id) on delete cascade,
+  buzz_cycle_id uuid null,
   kind text not null default 'answer' check (kind in ('answer', 'manual')),
   delta integer not null,
   reason text null,
@@ -145,6 +146,10 @@ create table buzz_attempts (
   unique (buzz_cycle_id, player_id)
 );
 
+alter table score_events
+  add constraint score_events_buzz_cycle_fk
+  foreign key (buzz_cycle_id) references buzz_cycles(id) on delete set null;
+
 alter table rooms
   add constraint rooms_current_question_session_fk
   foreign key (current_question_session_id) references question_sessions(id) on delete set null;
@@ -156,6 +161,7 @@ alter table rooms
 create index players_room_id_idx on players(room_id);
 create index score_events_room_id_idx on score_events(room_id);
 create index score_events_player_id_idx on score_events(player_id);
+create index score_events_buzz_cycle_id_idx on score_events(buzz_cycle_id);
 create index question_hints_question_id_idx on question_hints(question_id);
 create index question_assets_question_id_idx on question_assets(question_id);
 create index room_question_queue_room_id_idx on room_question_queue(room_id);

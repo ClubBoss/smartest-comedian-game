@@ -17,6 +17,7 @@
 - Buzzer ordering is server-authoritative in the normal path, with auditable host override for recovery.
 - Eligibility resets on every new buzz cycle; no wrong-answer lockout carries forward.
 - Scoring is append-only and supports zero-value answer events.
+- Normal answer scoring is traceable to the exact buzz cycle it resolved.
 - Media failure cannot corrupt game state.
 - Preloading a question is private until the host reveals its learner-facing stimulus.
 
@@ -50,13 +51,14 @@
 - id UUID PK
 - room_id UUID FK
 - player_id UUID FK
+- buzz_cycle_id UUID NULL FK
 - kind TEXT: answer | manual
 - delta INT (including zero)
 - reason TEXT NULL
 - reverted_event_id UUID NULL
 - created_at TIMESTAMPTZ
 
-Totals are derived by summing non-reverted events. A zero-value `answer` event records host resolution without changing the total.
+Normal `answer` events reference the buzz cycle being resolved. `manual` events may omit it. Totals are derived by summing non-reverted events. A zero-value `answer` event records host resolution without changing the total.
 
 ### questions
 - id UUID PK
@@ -137,7 +139,7 @@ The uniqueness is cycle-scoped only. The same player may submit again in the nex
 2. Record one server-received attempt for that player in this cycle.
 3. Atomically set winner with `winner_source=buzz` only if cycle has no winner.
 4. Close/lock the cycle after a winner is accepted.
-5. Host resolves the answer and optionally records `+1`, `0`, `-1`, or manual score.
+5. Host resolves the answer and records `+1`, `0`, or `-1` against that `buzz_cycle_id`, or uses a manual arbitrary score when needed.
 6. Host can explicitly override winner with `winner_source=host` as recovery.
 7. If the question continues, create a brand-new cycle. No prior-answer exclusion is carried forward.
 

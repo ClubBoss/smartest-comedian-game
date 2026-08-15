@@ -59,3 +59,7 @@ Server arbitration is the normal path, but the host can replace/assign a winner 
 ## D-015 - Selecting a question does not reveal it
 Status: accepted.
 A live question can be preloaded privately for the host. Shared Display/players see learner-facing text/images only after `stimulus_revealed` is explicitly enabled.
+
+## D-016 - Normal answer score links to its buzz cycle
+Status: accepted.
+A normal +1/0/-1 resolution references the exact buzz cycle that produced the answer. Manual special-score events may exist without a buzz cycle. This preserves an unambiguous live-game audit trail across repeated answers.
