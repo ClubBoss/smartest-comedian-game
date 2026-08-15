@@ -20,7 +20,53 @@ type NoiseOptions = {
   frequency?: number;
 };
 
+type RecordedCue = {
+  url: string;
+  offset?: number;
+  duration?: number;
+  volume?: number;
+};
+
+const RECORDED_CUES: Partial<Record<string, RecordedCue>> = {
+  airhorn: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/3/35/Prime_PM-990.ogg",
+    duration: 1.25,
+    volume: 0.82,
+  },
+  bell: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/6/64/Dingdingding.wav",
+    duration: 1.65,
+    volume: 0.78,
+  },
+  gong: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/4/42/Gong_or_bell_vibrant_%28short%29.ogg",
+    duration: 2.2,
+    volume: 0.78,
+  },
+  siren: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/a/ac/Toy_siren_alarm.ogg",
+    duration: 1.35,
+    volume: 0.68,
+  },
+  bike: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/c/ce/Rotating-bicycle-bell.wav",
+    duration: 1.3,
+    volume: 0.82,
+  },
+  goat: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/b/bc/Herd_of_goats_bleating.ogg",
+    duration: 1.55,
+    volume: 0.88,
+  },
+  rooster: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/c/c5/Small_rooster_crowing.ogg",
+    duration: 2.1,
+    volume: 0.88,
+  },
+};
+
 let sharedContext: AudioContext | null = null;
+const recordedBufferCache = new Map<string, Promise<AudioBuffer | null>>();
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -45,8 +91,77 @@ async function ensureRunningContext(): Promise<AudioContext | null> {
   return context;
 }
 
+function loadRecordedBuffer(context: AudioContext, url: string): Promise<AudioBuffer | null> {
+  const cached = recordedBufferCache.get(url);
+  if (cached) return cached;
+
+  const pending = fetch(url, { mode: "cors", cache: "force-cache" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`Audio fetch failed: ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then((bytes) => context.decodeAudioData(bytes.slice(0)))
+    .catch(() => null);
+  recordedBufferCache.set(url, pending);
+  return pending;
+}
+
+function waitForRecordedBuffer(
+  context: AudioContext,
+  url: string,
+  maxWaitMs: number,
+): Promise<AudioBuffer | null> {
+  const pending = loadRecordedBuffer(context, url);
+  if (maxWaitMs <= 0) return Promise.resolve(null);
+  return Promise.race([
+    pending,
+    new Promise<AudioBuffer | null>((resolve) => {
+      window.setTimeout(() => resolve(null), maxWaitMs);
+    }),
+  ]);
+}
+
+function warmRecordedCues(context: AudioContext) {
+  for (const cue of Object.values(RECORDED_CUES)) {
+    if (cue) void loadRecordedBuffer(context, cue.url);
+  }
+}
+
+async function playRecordedCue(
+  context: AudioContext,
+  key: string | null,
+  maxWaitMs: number,
+): Promise<boolean> {
+  if (!key) return false;
+  const cue = RECORDED_CUES[key];
+  if (!cue) return false;
+  const buffer = await waitForRecordedBuffer(context, cue.url, maxWaitMs);
+  if (!buffer) return false;
+
+  const offset = Math.max(0, Math.min(cue.offset ?? 0, Math.max(0, buffer.duration - 0.02)));
+  const available = Math.max(0.02, buffer.duration - offset);
+  const duration = Math.min(cue.duration ?? available, available);
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+  source.buffer = buffer;
+  gain.gain.setValueAtTime(cue.volume ?? 0.8, context.currentTime);
+  source.connect(gain);
+  gain.connect(context.destination);
+  source.start(0, offset, duration);
+  source.addEventListener("ended", () => {
+    try {
+      source.disconnect();
+      gain.disconnect();
+    } catch {
+      // Browser may already have detached the graph.
+    }
+  }, { once: true });
+  return true;
+}
+
 export async function armBuzzerAudio(): Promise<boolean> {
   const context = await ensureRunningContext();
+  if (context?.state === "running") warmRecordedCues(context);
   return context?.state === "running";
 }
 
@@ -195,9 +310,11 @@ function scheduleBuiltIn(context: AudioContext, key: string | null, output: Audi
   }
 }
 
-export async function playBuiltInCue(key: string | null): Promise<void> {
+export async function playBuiltInCue(key: string | null, maxRecordedWaitMs = 900): Promise<void> {
   const context = await ensureRunningContext();
   if (!context) return;
+
+  if (await playRecordedCue(context, key, maxRecordedWaitMs)) return;
 
   const master = context.createGain();
   master.gain.setValueAtTime(0.8, context.currentTime);
@@ -223,5 +340,5 @@ export async function playWinnerCue(
     await audio.play();
     return;
   }
-  await playBuiltInCue(soundKey);
+  await playBuiltInCue(soundKey, 150);
 }
