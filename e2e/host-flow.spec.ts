@@ -91,6 +91,7 @@ test("host game mode guides, hotkeys, preflight and TV preview through a live an
   await expect(host.getByText("Open the buzzer")).toBeVisible();
 
   await host.keyboard.press("Space");
+  await expect(host.getByRole("heading", { name: "Open", exact: true })).toBeVisible({ timeout: 10_000 });
   let roomResponse = await request.get(`/api/rooms/${room.code}`);
   let roomState = await roomResponse.json();
   expect(roomState.buzz.status).toBe("open");
@@ -110,6 +111,7 @@ test("host game mode guides, hotkeys, preflight and TV preview through a live an
   expect(roomState.players.find((player: { id: string }) => player.id === p1.playerId).score).toBe(1);
 
   await host.keyboard.press("Space");
+  await expect(host.getByRole("heading", { name: "Open", exact: true })).toBeVisible({ timeout: 10_000 });
   roomResponse = await request.get(`/api/rooms/${room.code}`);
   roomState = await roomResponse.json();
   expect(roomState.buzz.status).toBe("open");
