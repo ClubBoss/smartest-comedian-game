@@ -4,7 +4,7 @@ export type SupabasePublicEnv = {
 };
 
 export type SupabaseServerEnv = SupabasePublicEnv & {
-  serviceRoleKey: string;
+  adminKey: string;
 };
 
 type EnvSource = Record<string, string | undefined>;
@@ -15,6 +15,16 @@ function requireValue(name: string, value: string | undefined): string {
   }
 
   return value;
+}
+
+function readSupabaseAdminKey(env: EnvSource): string {
+  const secretKey = env.SUPABASE_SECRET_KEY?.trim();
+  if (secretKey) return secretKey;
+
+  return requireValue(
+    "SUPABASE_SECRET_KEY or legacy SUPABASE_SERVICE_ROLE_KEY",
+    env.SUPABASE_SERVICE_ROLE_KEY,
+  );
 }
 
 export function readSupabasePublicEnv(
@@ -40,9 +50,6 @@ export function readSupabaseServerEnv(
 ): SupabaseServerEnv {
   return {
     ...readSupabasePublicEnv(env),
-    serviceRoleKey: requireValue(
-      "SUPABASE_SERVICE_ROLE_KEY",
-      env.SUPABASE_SERVICE_ROLE_KEY,
-    ),
+    adminKey: readSupabaseAdminKey(env),
   };
 }

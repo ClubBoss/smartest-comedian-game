@@ -1,0 +1,223 @@
+name: Cloudflare Production
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "supabase/migrations/**"
+      - "package.json"
+      - "next.config.ts"
+      - "open-next.config.ts"
+      - "wrangler.jsonc"
+      - ".github/workflows/cloudflare-production.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "supabase/migrations/**"
+      - "package.json"
+      - "next.config.ts"
+      - "open-next.config.ts"
+      - "wrangler.jsonc"
+      - ".github/workflows/cloudflare-production.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smartest-comedian-cloudflare-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  worker-build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_cloudflare_build_only
+      SUPABASE_SECRET_KEY: sb_secret_cloudflare_build_only
+      QUESTION_BANK_ADMIN_KEY: cloudflare-build-only
+      APP_BUILD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build for Cloudflare Workers runtime
+        run: npm run build:cloudflare
+
+      - name: Dry-run Cloudflare Worker bundle
+        run: npx wrangler deploy --dry-run
+
+  deploy-production:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TARGET_SHA: ${{ github.sha }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      QUESTION_BANK_ADMIN_KEY: ${{ secrets.QUESTION_BANK_ADMIN_KEY }}
+      APP_BUILD_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout exact accepted SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.110.0
+
+      - name: Validate deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            CLOUDFLARE_API_TOKEN
+            CLOUDFLARE_ACCOUNT_ID
+            SUPABASE_ACCESS_TOKEN
+            SUPABASE_PROJECT_REF
+            SUPABASE_DB_PASSWORD
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+            SUPABASE_SECRET_KEY
+            QUESTION_BANK_ADMIN_KEY
+          )
+          for name in "${required[@]}"; do
+            test -n "${!name:-}" || { echo "Missing required repository secret: ${name}" >&2; exit 1; }
+          done
+          echo "NEXT_PUBLIC_SUPABASE_URL=https://${SUPABASE_PROJECT_REF}.supabase.co" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Validate application before deployment
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run typecheck
+          npm test
+
+      - name: Link production Supabase project
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Preview production database migrations
+        run: supabase db push --linked --dry-run --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Apply production database migrations
+        run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Build exact SHA for Cloudflare Workers
+        run: npm run build:cloudflare
+
+      - name: Prepare Worker runtime secrets
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("node:fs");
+          const names = [
+            "NEXT_PUBLIC_SUPABASE_URL",
+            "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+            "SUPABASE_SECRET_KEY",
+            "QUESTION_BANK_ADMIN_KEY",
+            "APP_BUILD_SHA",
+          ];
+          const payload = Object.fromEntries(names.map((name) => {
+            const value = process.env[name];
+            if (!value) throw new Error(`Missing runtime value: ${name}`);
+            return [name, value];
+          }));
+          fs.writeFileSync("/tmp/smartest-comedian-worker-secrets.json", JSON.stringify(payload));
+          NODE
+
+      - name: Dry-run production Worker bundle
+        run: |
+          set -euo pipefail
+          npx wrangler deploy \
+            --dry-run \
+            --keep-vars \
+            --secrets-file /tmp/smartest-comedian-worker-secrets.json
+
+      - name: Deploy exact SHA to Cloudflare Workers
+        id: deploy
+        run: |
+          set -euo pipefail
+          npx wrangler deploy \
+            --keep-vars \
+            --secrets-file /tmp/smartest-comedian-worker-secrets.json \
+            2>&1 | tee deploy-output.txt
+          deploy_url="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' deploy-output.txt | tail -n 1)"
+          test -n "$deploy_url" || { echo "Cloudflare did not report a workers.dev URL" >&2; exit 1; }
+          echo "url=$deploy_url" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke exact deployed SHA and Supabase connection
+        env:
+          LIVE_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+
+          retry_get() {
+            local url="$1"
+            local output="$2"
+            local attempt code
+            for attempt in $(seq 1 12); do
+              code="$(curl --silent --show-error --location \
+                --connect-timeout 10 --max-time 20 \
+                --output "$output" --write-out '%{http_code}' \
+                "$url" || true)"
+              if [[ "$code" =~ ^2[0-9][0-9]$ ]]; then
+                return 0
+              fi
+              if [[ "$attempt" -lt 12 ]]; then sleep 5; fi
+            done
+            echo "Remote endpoint did not return HTTP success: $url" >&2
+            return 1
+          }
+
+          retry_get "$LIVE_URL/" /tmp/root.html
+          retry_get "$LIVE_URL/host" /tmp/host.html
+          retry_get "$LIVE_URL/api/health" /tmp/health.json
+
+          TARGET_SHA="$TARGET_SHA" node <<'NODE'
+          const fs = require("node:fs");
+          const health = JSON.parse(fs.readFileSync("/tmp/health.json", "utf8"));
+          const expected = process.env.TARGET_SHA;
+          if (health.ok !== true) throw new Error(`Health is not OK: ${JSON.stringify(health)}`);
+          if (health.database !== "ok") throw new Error(`Database health failed: ${JSON.stringify(health)}`);
+          if (health.buildSha !== expected) throw new Error(`SHA mismatch: expected ${expected}, observed ${health.buildSha}`);
+          console.log(`Verified Cloudflare Worker + Supabase at exact SHA ${expected}`);
+          NODE
+
+          {
+            echo "## Cloudflare production deployment"
+            echo
+            echo "- URL: $LIVE_URL"
+            echo "- exact_sha: \`$TARGET_SHA\`"
+            echo "- root: PASS"
+            echo "- host: PASS"
+            echo "- Supabase health: PASS"
+          } >> "$GITHUB_STEP_SUMMARY"
