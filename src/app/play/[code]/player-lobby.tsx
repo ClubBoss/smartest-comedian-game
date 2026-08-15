@@ -120,11 +120,16 @@ export function PlayerLobby({ code }: { code: string }) {
   if (identity) {
     const buzzOpen = lobby.buzz?.status === "open";
     const isWinner = lobby.buzz?.winnerId === identity.playerId;
+    const currentPlayer = lobby.players.find((player) => player.id === identity.playerId);
+    const score = currentPlayer?.score ?? 0;
     return (
       <main className="stack narrow player-controller">
-        <div>
-          <p className="eyebrow">Room {code}</p>
-          <h1>{identity.displayName}</h1>
+        <div className="split-heading">
+          <div>
+            <p className="eyebrow">Room {code}</p>
+            <h1>{identity.displayName}</h1>
+          </div>
+          <div className="player-score-badge"><span>Score</span><strong>{score}</strong></div>
         </div>
         <section className="card stack center">
           <button
@@ -134,6 +139,9 @@ export function PlayerLobby({ code }: { code: string }) {
           >
             {buzzOpen ? (buzzing ? "SENDING..." : "BUZZ") : isWinner ? "FIRST!" : lobby.buzz?.winnerName ? `${lobby.buzz.winnerName} BUZZED` : "WAIT"}
           </button>
+          {isWinner && lobby.buzz?.scoreResolved ? (
+            <p className="score-result">Answer score: {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</p>
+          ) : null}
           <p className="muted compact">Each new buzzer cycle makes everyone eligible again, including the previous respondent.</p>
         </section>
         <section className="card stack center">
