@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { HostLobby } from "./host-lobby";
 
 const CURRENT_ROOM_KEY = "smartest-host-current-room";
@@ -35,8 +35,9 @@ function discoverHostRooms(): string[] {
   for (let index = 0; index < localStorage.length; index += 1) {
     const key = localStorage.key(index);
     if (!key?.startsWith(HOST_TOKEN_PREFIX)) continue;
+    if (key === CURRENT_ROOM_KEY || key === ROOM_HISTORY_KEY) continue;
     const code = key.slice(HOST_TOKEN_PREFIX.length).trim().toUpperCase();
-    if (!code || !localStorage.getItem(key)) continue;
+    if (!/^[A-Z0-9]{6}$/.test(code) || !localStorage.getItem(key)) continue;
     codes.push(code);
   }
   return codes;
@@ -47,7 +48,9 @@ function reconcileHistory(markCurrent: boolean): { rooms: SavedRoom[]; currentCo
   const byCode = new Map<string, SavedRoom>();
 
   for (const room of readHistory()) {
-    byCode.set(room.code, room);
+    if (/^[A-Z0-9]{6}$/.test(room.code) && localStorage.getItem(`${HOST_TOKEN_PREFIX}${room.code}`)) {
+      byCode.set(room.code, room);
+    }
   }
   for (const code of discoverHostRooms()) {
     if (!byCode.has(code)) byCode.set(code, { code, lastUsedAt: 0 });
@@ -105,7 +108,7 @@ export function HostRoomManager() {
     window.location.reload();
   }
 
-  function captureNewRoom(event: React.MouseEvent<HTMLDivElement>) {
+  function captureNewRoom(event: MouseEvent<HTMLDivElement>) {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     const button = target.closest("button");
