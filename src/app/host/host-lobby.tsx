@@ -1,43 +1,34 @@
 "use client";
 
 import { QrCode } from "@/components/qr-code";
-import type { LobbyState } from "@/domain/lobby";
 import { soundLabel } from "@/domain/sounds";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRoomState } from "@/hooks/use-room-state";
+import { useEffect, useMemo, useState } from "react";
 
 const CURRENT_ROOM_KEY = "smartest-host-current-room";
 
 export function HostLobby() {
   const [capacity, setCapacity] = useState(8);
-  const [lobby, setLobby] = useState<LobbyState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [hostToken, setHostToken] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-
-  const loadLobby = useCallback(async (code: string) => {
-    const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
-    if (!response.ok) {
-      if (response.status === 404) localStorage.removeItem(CURRENT_ROOM_KEY);
-      return;
-    }
-    setLobby(await response.json());
-  }, []);
+  const [overridePlayerId, setOverridePlayerId] = useState("");
+  const { state: lobby, error, refresh } = useRoomState(roomCode);
 
   useEffect(() => {
-    const savedCode = localStorage.getItem(CURRENT_ROOM_KEY);
-    if (!savedCode) return;
-    const initial = window.setTimeout(() => void loadLobby(savedCode), 0);
+    const initial = window.setTimeout(() => {
+      const savedCode = localStorage.getItem(CURRENT_ROOM_KEY);
+      if (!savedCode) return;
+      setRoomCode(savedCode);
+      setHostToken(localStorage.getItem(`smartest-host-${savedCode}`));
+    }, 0);
     return () => window.clearTimeout(initial);
-  }, [loadLobby]);
-
-  useEffect(() => {
-    if (!lobby?.code) return;
-    const timer = window.setInterval(() => void loadLobby(lobby.code), 1000);
-    return () => window.clearInterval(timer);
-  }, [loadLobby, lobby?.code]);
+  }, []);
 
   async function createRoom() {
     setCreating(true);
-    setError(null);
+    setActionError(null);
     try {
       const response = await fetch("/api/rooms", {
         method: "POST",
@@ -48,12 +39,35 @@ export function HostLobby() {
       if (!response.ok) throw new Error(result.error ?? "Could not create room.");
       localStorage.setItem(CURRENT_ROOM_KEY, result.code);
       localStorage.setItem(`smartest-host-${result.code}`, result.hostToken);
-      await loadLobby(result.code);
+      setHostToken(result.hostToken);
+      setRoomCode(result.code);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create room.");
+      setActionError(caught instanceof Error ? caught.message : "Could not create room.");
     } finally {
       setCreating(false);
     }
+  }
+
+  async function hostAction(path: string, body?: object) {
+    if (!roomCode || !hostToken) {
+      setActionError("Host control token is missing. Create a new room on this device.");
+      return;
+    }
+    setActionError(null);
+    const response = await fetch(`/api/rooms/${roomCode}/buzz/${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-host-token": hostToken,
+      },
+      body: JSON.stringify(body ?? {}),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      setActionError(result.error ?? "Host action failed.");
+      return;
+    }
+    await refresh();
   }
 
   const joinUrl = useMemo(() => {
@@ -61,7 +75,7 @@ export function HostLobby() {
     return `${window.location.origin}/play/${lobby.code}`;
   }, [lobby]);
 
-  if (!lobby) {
+  if (!roomCode || !lobby) {
     return (
       <main className="stack narrow">
         <div>
@@ -81,25 +95,59 @@ export function HostLobby() {
           <button className="primary" onClick={createRoom} disabled={creating}>
             {creating ? "Creating..." : "Create room"}
           </button>
-          {error ? <p className="error">{error}</p> : null}
+          {actionError || error ? <p className="error">{actionError ?? error}</p> : null}
         </div>
       </main>
     );
   }
 
+  const buzzOpen = lobby.buzz?.status === "open";
+  const buzzLocked = lobby.buzz?.status === "locked";
+
   return (
     <main className="stack host-shell">
       <div className="split-heading">
         <div>
-          <p className="eyebrow">Lobby</p>
+          <p className="eyebrow">Host console</p>
           <h1>Room {lobby.code}</h1>
           <p className="muted">{lobby.playerCount} / {lobby.capacity} players joined</p>
         </div>
         <button className="secondary" onClick={() => {
           localStorage.removeItem(CURRENT_ROOM_KEY);
-          setLobby(null);
+          setRoomCode(null);
+          setHostToken(null);
         }}>New room</button>
       </div>
+
+      <section className="card stack host-buzzer-panel">
+        <div className="split-heading">
+          <div>
+            <p className="eyebrow">Buzzer</p>
+            <h2>{buzzOpen ? "Open" : buzzLocked ? `${lobby.buzz?.winnerName} buzzed first` : "Ready"}</h2>
+          </div>
+          <span className={`status-pill ${buzzOpen ? "live" : ""}`}>{buzzOpen ? "LIVE" : lobby.phase}</span>
+        </div>
+        <div className="host-actions">
+          <button
+            className="primary"
+            disabled={lobby.playerCount < 2 || buzzOpen}
+            onClick={() => void hostAction("open")}
+          >
+            {buzzLocked ? "Open again" : "Open buzzer"}
+          </button>
+          <button className="secondary" disabled={!buzzOpen} onClick={() => void hostAction("close")}>Close</button>
+        </div>
+        {lobby.buzz ? (
+          <div className="override-row">
+            <select value={overridePlayerId} onChange={(event) => setOverridePlayerId(event.target.value)}>
+              <option value="">Manual winner...</option>
+              {lobby.players.map((player) => <option key={player.id} value={player.id}>{player.displayName}</option>)}
+            </select>
+            <button className="secondary" disabled={!overridePlayerId} onClick={() => void hostAction("override", { playerId: overridePlayerId })}>Set winner</button>
+          </div>
+        ) : null}
+        {actionError ? <p className="error">{actionError}</p> : null}
+      </section>
 
       <div className="lobby-grid">
         <section className="card stack center">

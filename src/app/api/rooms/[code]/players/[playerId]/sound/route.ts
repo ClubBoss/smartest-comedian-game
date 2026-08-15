@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { broadcastRoomRefresh } from "@/lib/room-events";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { tokenMatches } from "@/lib/tokens";
 
@@ -16,6 +17,7 @@ export async function POST(
   { params }: { params: Promise<{ code: string; playerId: string }> },
 ) {
   const { code: rawCode, playerId } = await params;
+  const code = rawCode.trim().toUpperCase();
   const reconnectToken = request.headers.get("x-player-token");
   if (!reconnectToken) {
     return Response.json({ error: "Missing player token." }, { status: 401 });
@@ -40,7 +42,7 @@ export async function POST(
   const { data: room } = await supabase
     .from("rooms")
     .select("id")
-    .eq("code", rawCode.trim().toUpperCase())
+    .eq("code", code)
     .is("ended_at", null)
     .maybeSingle();
 
@@ -89,5 +91,6 @@ export async function POST(
     await supabase.storage.from("buzzer-sounds").remove([player.custom_sound_path]);
   }
 
+  await broadcastRoomRefresh(code);
   return Response.json({ soundType: "custom", soundKey: null });
 }
