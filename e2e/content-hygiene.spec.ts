@@ -25,8 +25,8 @@ test("host can remove a stale non-current room from this browser", async ({ page
   await page.locator("select").selectOption("2");
   await page.getByRole("button", { name: "Create room" }).click();
 
-  const firstHeading = page.getByRole("heading", { name: /^Room [A-Z0-9]{6}$/ });
-  const firstCode = (await firstHeading.textContent())?.replace("Room ", "") ?? "";
+  const roomHeading = page.getByRole("heading", { name: /^Room [A-Z0-9]{6}$/ });
+  const firstCode = (await roomHeading.textContent())?.replace("Room ", "") ?? "";
   expect(firstCode).toMatch(/^[A-Z0-9]{6}$/);
 
   page.once("dialog", async (dialog) => dialog.accept());
@@ -34,7 +34,18 @@ test("host can remove a stale non-current room from this browser", async ({ page
   await page.locator("select").selectOption("2");
   await page.getByRole("button", { name: "Create room" }).click();
 
+  const secondCode = (await roomHeading.textContent())?.replace("Room ", "") ?? "";
+  expect(secondCode).toMatch(/^[A-Z0-9]{6}$/);
+  expect(secondCode).not.toBe(firstCode);
+
   const roomsPanel = page.locator("details").filter({ hasText: /^Rooms/ });
+  const secondRoomRow = roomsPanel.locator(".split-heading").filter({ hasText: `Room ${secondCode}` });
+
+  // HostRoomManager reconciles the current-room marker on its polling tick.
+  // Wait for that canonical state before opening the panel so a mid-click
+  // controlled <details> update cannot collapse the Remove target.
+  await expect(secondRoomRow.getByText("Current", { exact: true })).toHaveCount(1);
+
   const roomsOpen = await roomsPanel.evaluate((element) => (element as HTMLDetailsElement).open);
   if (!roomsOpen) await roomsPanel.locator("summary").click();
 
