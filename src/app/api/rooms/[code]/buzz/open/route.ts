@@ -17,6 +17,9 @@ export async function POST(
     if (error.message.includes("ERR_NOT_ENOUGH_PLAYERS")) {
       return Response.json({ error: "At least two players are required." }, { status: 409 });
     }
+    if (error.message.includes("ERR_STIMULUS_HIDDEN")) {
+      return Response.json({ error: "ERR_STIMULUS_HIDDEN" }, { status: 409 });
+    }
     console.error("Open buzzer failed", error);
     return Response.json({ error: "Could not open buzzer." }, { status: 500 });
   }
