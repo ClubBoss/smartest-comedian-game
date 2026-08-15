@@ -1,6 +1,6 @@
 begin;
 
-select plan(17);
+select plan(19);
 
 select has_function('public', 'resolve_answer_score_atomic', array['uuid', 'uuid', 'uuid', 'integer'], 'answer score RPC exists');
 select has_function('public', 'add_manual_score_atomic', array['uuid', 'uuid', 'integer', 'text'], 'manual score RPC exists');
