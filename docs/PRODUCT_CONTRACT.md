@@ -29,6 +29,7 @@ A home group needs a low-friction tool to run a comedy quiz game with 2-10 playe
 - Can manually assign/override a buzz winner as recovery.
 - Can remove/reorder players.
 - Manages Question Bank content, including question images.
+- Can trigger a small fixed palette of ephemeral comedy reactions on the shared display; reactions never alter game state or history.
 
 ### Player
 - Joins using room code or QR.
@@ -46,6 +47,7 @@ A home group needs a low-friction tool to run a comedy quiz game with 2-10 playe
 - Shows question text and/or question images only after host reveal.
 - Shows buzzer state and first accepted player.
 - Plays the winning player's individual buzzer sound when audio is enabled.
+- Plays host-triggered ephemeral reaction cues when audio is enabled.
 - Shows hints/answer/explanation only according to host reveal state.
 
 ## 4. Player-count rule
@@ -121,10 +123,11 @@ Client timestamps never decide the winner. Host can manually override the winner
 - Optional free-text reason may be stored.
 - Host can undo the latest score transaction without deleting history.
 
-## 9. Individual buzzer sounds
+## 9. Individual buzzer sounds and host reactions
 
 - Every active player chooses one individual sound.
 - V1 supports a safe built-in sound library.
+- Built-in sounds may be generated locally in-browser so routine play does not require uploaded audio assets.
 - Data model supports a player-uploaded short custom audio clip.
 - Custom sound is stored as media content, not compiled into the app.
 - Player sound identity survives reconnect.
@@ -132,6 +135,8 @@ Client timestamps never decide the winner. Host can manually override the winner
 - Winning sound is played on shared display.
 - Audio failure never blocks buzz acceptance or scoring.
 - Host can mute all sounds.
+- Host has a small fixed reaction palette for comedy beats such as laughter, applause, surprise, booing and rimshot.
+- Host reactions are host-authorized ephemeral Realtime events: they are not persisted, scored, or part of the live question state machine.
 
 ## 10. Reveal/privacy model
 
@@ -152,8 +157,8 @@ Client timestamps never decide the winner. Host can manually override the winner
 - Exact esports-grade latency measurement.
 - Video questions; V1 media scope is still images.
 - Full round/tournament rules engine.
-- Host soundboard/jingle system.
+- Customizable/full host soundboard or jingle engine beyond the fixed reaction palette.
 
 ## 12. V1 acceptance scenario
 
-A host creates a room for 8 players, shares QR, eight people join with distinct buzzer sounds, and the host prepares an ordered queue. A saved text/photo question is preloaded privately and then revealed. The host opens buzzers. Two or more players press nearly simultaneously; exactly one wins and everyone else locks for that cycle. The display identifies the winner and plays that player's sound. Host resolves the answer as `-1`; then opens a fresh cycle and the same player is eligible again together with everyone else. Another answer receives `0`; the game continues. A later answer receives `+1`, all scores update, then the host reveals the canonical answer and advances. A special question can use a manual score delta. The same flow works with 2 and 10 players.
+A host creates a room for 8 players, shares QR, eight people join with distinct buzzer sounds, and the host prepares an ordered queue. A saved text/photo question is preloaded privately and then revealed. The host opens buzzers. Two or more players press nearly simultaneously; exactly one wins and everyone else locks for that cycle. The display identifies the winner and plays that player's sound. Host resolves the answer as `-1`; then opens a fresh cycle and the same player is eligible again together with everyone else. Another answer receives `0`; the game continues. A later answer receives `+1`, all scores update, then the host reveals the canonical answer and advances. The host may trigger a fixed comedy reaction on the shared display without changing any score or game state. A special question can use a manual score delta. The same flow works with 2 and 10 players.
