@@ -125,6 +125,20 @@ export function HostRoomManager() {
     window.location.reload();
   }
 
+  function removeRoom(code: string) {
+    if (code === currentCode) return;
+    const confirmed = window.confirm(
+      `Remove Room ${code} from this browser? Saved Host access for this room will be removed here, but server game history is not deleted.`,
+    );
+    if (!confirmed) return;
+
+    localStorage.removeItem(`${HOST_TOKEN_PREFIX}${code}`);
+    const history = readHistory().filter((room) => room.code !== code);
+    localStorage.setItem(ROOM_HISTORY_KEY, JSON.stringify(history));
+    const next = reconcileHistory(false);
+    setRooms(next.rooms);
+  }
+
   function captureNewRoom(event: MouseEvent<HTMLDivElement>) {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -152,7 +166,7 @@ export function HostRoomManager() {
     <div className="stack" onClickCapture={captureNewRoom}>
       <details className="card stack" open={!currentCode}>
         <summary><strong>Rooms</strong> · {rooms.length} saved on this browser</summary>
-        <p className="muted compact">Creating a new room no longer removes access to older rooms. Host rooms are recoverable here while this browser storage is kept.</p>
+        <p className="muted compact">Creating a new room keeps older Host access here. Remove stale non-current rooms when you no longer need them on this browser.</p>
         {rooms.length ? (
           <div className="stack">
             {rooms.map((room) => (
@@ -161,14 +175,21 @@ export function HostRoomManager() {
                   <strong>Room {room.code}</strong>
                   {room.code === currentCode ? <span className="status-pill live">Current</span> : null}
                 </div>
-                <button
-                  className="secondary"
-                  type="button"
-                  disabled={room.code === currentCode}
-                  onClick={() => openRoom(room.code)}
-                >
-                  {room.code === currentCode ? "Open now" : "Open"}
-                </button>
+                <div className="mini-actions">
+                  <button
+                    className="secondary"
+                    type="button"
+                    disabled={room.code === currentCode}
+                    onClick={() => openRoom(room.code)}
+                  >
+                    {room.code === currentCode ? "Open now" : "Open"}
+                  </button>
+                  {room.code !== currentCode ? (
+                    <button className="secondary" type="button" onClick={() => removeRoom(room.code)}>
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
