@@ -51,14 +51,24 @@ type AdminState = {
   current: CurrentQuestion | null;
 };
 
+export type QuestionReadiness = {
+  readyQuestions: number;
+  queued: number;
+  current: boolean;
+};
+
 export function LiveQuestionPanel({
   code,
   hostToken,
   onRoomRefresh,
+  gameMode = false,
+  onReadinessChange,
 }: {
   code: string;
   hostToken: string;
   onRoomRefresh: () => Promise<unknown>;
+  gameMode?: boolean;
+  onReadinessChange?: (value: QuestionReadiness) => void;
 }) {
   const [state, setState] = useState<AdminState | null>(null);
   const [selectedQuestionId, setSelectedQuestionId] = useState("");
@@ -91,6 +101,19 @@ export function LiveQuestionPanel({
       window.clearInterval(interval);
     };
   }, [load]);
+
+  const queued = useMemo(
+    () => (state?.queue ?? []).filter((item) => item.state === "queued"),
+    [state?.queue],
+  );
+
+  useEffect(() => {
+    onReadinessChange?.({
+      readyQuestions: state?.readyQuestions.length ?? 0,
+      queued: queued.length,
+      current: Boolean(state?.current),
+    });
+  }, [onReadinessChange, queued.length, state?.current, state?.readyQuestions.length]);
 
   async function act(action: string, extra: object = {}) {
     setBusy(true);
@@ -125,11 +148,6 @@ export function LiveQuestionPanel({
       setBusy(false);
     }
   }
-
-  const queued = useMemo(
-    () => (state?.queue ?? []).filter((item) => item.state === "queued"),
-    [state?.queue],
-  );
 
   if (!state) {
     return <section className="card"><p className="muted compact">Loading live question controller...</p>{error ? <p className="error">{error}</p> : null}</section>;
@@ -181,12 +199,25 @@ export function LiveQuestionPanel({
         ) : null}
 
         <div className="live-question-actions">
-          <button className="primary" disabled={busy || current.stimulusRevealed} onClick={() => void act("reveal-stimulus")}>Show question</button>
-          <button className="secondary" disabled={busy || !canRevealHint} onClick={() => void act("reveal-hint")}>Reveal next hint</button>
-          <button className="secondary" disabled={busy || current.answerRevealed} onClick={() => void act("reveal-answer")}>Reveal answer</button>
-          <button className="secondary" disabled={busy} onClick={() => void act("finish")}>Finish question</button>
+          <button className={`primary ${!current.stimulusRevealed ? "next-action" : ""}`} data-host-hotkey="show" disabled={busy || current.stimulusRevealed} onClick={() => void act("reveal-stimulus")}>Show question</button>
+          <button className="secondary" data-host-hotkey="h" disabled={busy || !canRevealHint} onClick={() => void act("reveal-hint")}>Reveal next hint</button>
+          <button className="secondary" data-host-hotkey="a" disabled={busy || current.answerRevealed || !current.stimulusRevealed} onClick={() => void act("reveal-answer")}>Reveal answer</button>
+          <button className="secondary" data-host-hotkey="n" disabled={busy} onClick={() => void act("finish")}>Finish question</button>
         </div>
         {!current.stimulusRevealed ? <p className="muted compact">TV and players cannot see the prompt, photos, hints or answer yet. Buzzer is intentionally blocked until Show question.</p> : null}
+        {error ? <p className="error">{error}</p> : null}
+      </section>
+    );
+  }
+
+  if (gameMode) {
+    return (
+      <section className="card stack live-question-host">
+        <div className="compact-question-queue">
+          <div><p className="eyebrow">Next question</p><h2>{queued[0]?.prompt || (queued.length > 0 ? "Image-led question" : "Queue is empty")}</h2><p className="muted compact">{queued.length} queued</p></div>
+          <button className="primary next-action" data-host-hotkey="n" disabled={busy || queued.length === 0} onClick={() => void act("start-next")}>Preload next</button>
+        </div>
+        {queued.length === 0 ? <p className="muted compact">Exit Game Mode to choose Ready questions and build the queue.</p> : null}
         {error ? <p className="error">{error}</p> : null}
       </section>
     );
@@ -199,7 +230,7 @@ export function LiveQuestionPanel({
           <p className="eyebrow">Questions</p>
           <h2>Prepare the next question</h2>
         </div>
-        <button className="secondary" disabled={busy || queued.length === 0} onClick={() => void act("start-next")}>Preload next queued</button>
+        <button className="secondary" data-host-hotkey="n" disabled={busy || queued.length === 0} onClick={() => void act("start-next")}>Preload next queued</button>
       </div>
 
       <div className="question-picker-row">

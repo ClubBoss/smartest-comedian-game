@@ -24,7 +24,7 @@ export function DisplayLobby({ code }: { code: string }) {
     }
   }, [soundArmed]);
 
-  const { status: realtimeStatus } = useRoomPresence(code, "display", "shared-display", handleSoundTest);
+  const { status: realtimeStatus } = useRoomPresence(code, "display", "shared-display", handleSoundTest, { soundArmed });
 
   const joinUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
