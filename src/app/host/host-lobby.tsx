@@ -14,6 +14,9 @@ export function HostLobby() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [overridePlayerId, setOverridePlayerId] = useState("");
+  const [manualPlayerId, setManualPlayerId] = useState("");
+  const [manualDelta, setManualDelta] = useState(1);
+  const [manualReason, setManualReason] = useState("");
   const { state: lobby, error, refresh } = useRoomState(roomCode);
 
   useEffect(() => {
@@ -48,13 +51,13 @@ export function HostLobby() {
     }
   }
 
-  async function hostAction(path: string, body?: object) {
+  async function postHost(path: string, body?: object) {
     if (!roomCode || !hostToken) {
       setActionError("Host control token is missing. Create a new room on this device.");
-      return;
+      return false;
     }
     setActionError(null);
-    const response = await fetch(`/api/rooms/${roomCode}/buzz/${path}`, {
+    const response = await fetch(`/api/rooms/${roomCode}/${path}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -65,9 +68,29 @@ export function HostLobby() {
     const result = await response.json();
     if (!response.ok) {
       setActionError(result.error ?? "Host action failed.");
-      return;
+      return false;
     }
     await refresh();
+    return true;
+  }
+
+  async function scoreAnswer(delta: -1 | 0 | 1) {
+    if (!lobby?.buzz?.winnerId) return;
+    await postHost("score/answer", {
+      playerId: lobby.buzz.winnerId,
+      cycleId: lobby.buzz.cycleId,
+      delta,
+    });
+  }
+
+  async function applyManualScore() {
+    if (!manualPlayerId || !Number.isInteger(manualDelta)) return;
+    const ok = await postHost("score/manual", {
+      playerId: manualPlayerId,
+      delta: manualDelta,
+      reason: manualReason,
+    });
+    if (ok) setManualReason("");
   }
 
   const joinUrl = useMemo(() => {
@@ -103,6 +126,9 @@ export function HostLobby() {
 
   const buzzOpen = lobby.buzz?.status === "open";
   const buzzLocked = lobby.buzz?.status === "locked";
+  const winner = lobby.buzz?.winnerId
+    ? lobby.players.find((player) => player.id === lobby.buzz?.winnerId) ?? null
+    : null;
 
   return (
     <main className="stack host-shell">
@@ -131,22 +157,78 @@ export function HostLobby() {
           <button
             className="primary"
             disabled={lobby.playerCount < 2 || buzzOpen}
-            onClick={() => void hostAction("open")}
+            onClick={() => void postHost("buzz/open")}
           >
             {buzzLocked ? "Open again" : "Open buzzer"}
           </button>
-          <button className="secondary" disabled={!buzzOpen} onClick={() => void hostAction("close")}>Close</button>
+          <button className="secondary" disabled={!buzzOpen} onClick={() => void postHost("buzz/close")}>Close</button>
         </div>
+
+        {winner ? (
+          <div className="score-winner stack">
+            <div className="split-heading">
+              <div>
+                <p className="eyebrow">Answer score</p>
+                <h2>{winner.displayName} · {winner.score}</h2>
+              </div>
+              {lobby.buzz?.scoreResolved ? <span className="status-pill">Recorded {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</span> : null}
+            </div>
+            <div className="answer-score-actions">
+              {([-1, 0, 1] as const).map((delta) => (
+                <button
+                  key={delta}
+                  className={delta === 1 ? "primary score-button" : "secondary score-button"}
+                  disabled={Boolean(lobby.buzz?.scoreResolved)}
+                  onClick={() => void scoreAnswer(delta)}
+                >
+                  {delta > 0 ? "+1" : delta}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {lobby.buzz ? (
           <div className="override-row">
             <select value={overridePlayerId} onChange={(event) => setOverridePlayerId(event.target.value)}>
               <option value="">Manual winner...</option>
               {lobby.players.map((player) => <option key={player.id} value={player.id}>{player.displayName}</option>)}
             </select>
-            <button className="secondary" disabled={!overridePlayerId} onClick={() => void hostAction("override", { playerId: overridePlayerId })}>Set winner</button>
+            <button className="secondary" disabled={!overridePlayerId} onClick={() => void postHost("buzz/override", { playerId: overridePlayerId })}>Set winner</button>
           </div>
         ) : null}
         {actionError ? <p className="error">{actionError}</p> : null}
+      </section>
+
+      <section className="card stack">
+        <div className="split-heading">
+          <div>
+            <p className="eyebrow">Special scoring</p>
+            <h2>Manual adjustment</h2>
+          </div>
+          <button className="secondary" disabled={!lobby.canUndoScore} onClick={() => void postHost("score/undo")}>Undo latest score</button>
+        </div>
+        <div className="manual-score-grid">
+          <select value={manualPlayerId} onChange={(event) => setManualPlayerId(event.target.value)}>
+            <option value="">Choose player...</option>
+            {lobby.players.map((player) => <option key={player.id} value={player.id}>{player.displayName} ({player.score})</option>)}
+          </select>
+          <input
+            aria-label="Manual score delta"
+            type="number"
+            step="1"
+            value={manualDelta}
+            onChange={(event) => setManualDelta(Number(event.target.value))}
+          />
+          <input
+            aria-label="Manual score reason"
+            value={manualReason}
+            maxLength={200}
+            onChange={(event) => setManualReason(event.target.value)}
+            placeholder="Reason (optional)"
+          />
+          <button className="secondary" disabled={!manualPlayerId || !Number.isInteger(manualDelta)} onClick={() => void applyManualScore()}>Apply</button>
+        </div>
       </section>
 
       <div className="lobby-grid">
@@ -156,13 +238,14 @@ export function HostLobby() {
           <p className="muted compact">Scan the QR or open {joinUrl}</p>
         </section>
         <section className="card stack">
-          <h2>Players</h2>
+          <h2>Scoreboard</h2>
           {lobby.players.length === 0 ? <p className="muted">Waiting for players...</p> : null}
           <div className="player-list">
             {lobby.players.map((player) => (
-              <div className="player-row" key={player.id}>
+              <div className="player-row score-row" key={player.id}>
                 <span className="seat">{player.seatOrder}</span>
                 <strong>{player.displayName}</strong>
+                <strong className="host-score">{player.score}</strong>
                 <span className="sound-pill">{player.soundType === "custom" ? "Custom sound" : soundLabel(player.soundKey)}</span>
               </div>
             ))}
