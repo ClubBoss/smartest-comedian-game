@@ -4,6 +4,7 @@ import { QrCode } from "@/components/qr-code";
 import { soundLabel } from "@/domain/sounds";
 import { useRoomState } from "@/hooks/use-room-state";
 import { useEffect, useMemo, useState } from "react";
+import { LiveQuestionPanel } from "./live-question-panel";
 
 const CURRENT_ROOM_KEY = "smartest-host-current-room";
 
@@ -67,7 +68,10 @@ export function HostLobby() {
     });
     const result = await response.json();
     if (!response.ok) {
-      setActionError(result.error ?? "Host action failed.");
+      const message = result.error === "ERR_STIMULUS_HIDDEN"
+        ? "Show the preloaded question before opening the buzzer."
+        : result.error;
+      setActionError(message ?? "Host action failed.");
       return false;
     }
     await refresh();
@@ -145,6 +149,8 @@ export function HostLobby() {
         }}>New room</button>
       </div>
 
+      {hostToken ? <LiveQuestionPanel code={lobby.code} hostToken={hostToken} onRoomRefresh={refresh} /> : null}
+
       <section className="card stack host-buzzer-panel">
         <div className="split-heading">
           <div>
@@ -213,20 +219,8 @@ export function HostLobby() {
             <option value="">Choose player...</option>
             {lobby.players.map((player) => <option key={player.id} value={player.id}>{player.displayName} ({player.score})</option>)}
           </select>
-          <input
-            aria-label="Manual score delta"
-            type="number"
-            step="1"
-            value={manualDelta}
-            onChange={(event) => setManualDelta(Number(event.target.value))}
-          />
-          <input
-            aria-label="Manual score reason"
-            value={manualReason}
-            maxLength={200}
-            onChange={(event) => setManualReason(event.target.value)}
-            placeholder="Reason (optional)"
-          />
+          <input aria-label="Manual score delta" type="number" step="1" value={manualDelta} onChange={(event) => setManualDelta(Number(event.target.value))} />
+          <input aria-label="Manual score reason" value={manualReason} maxLength={200} onChange={(event) => setManualReason(event.target.value)} placeholder="Reason (optional)" />
           <button className="secondary" disabled={!manualPlayerId || !Number.isInteger(manualDelta)} onClick={() => void applyManualScore()}>Apply</button>
         </div>
       </section>

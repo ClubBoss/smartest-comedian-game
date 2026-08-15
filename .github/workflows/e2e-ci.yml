@@ -48,3 +48,14 @@ jobs:
       - name: Print web app log on failure
         if: failure()
         run: cat /tmp/smartest-comedian-next.log || true
+      - name: Upload Playwright failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+            /tmp/smartest-comedian-next.log
+          if-no-files-found: ignore
+          retention-days: 3
