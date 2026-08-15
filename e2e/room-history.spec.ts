@@ -26,8 +26,13 @@ test("host can create a new room without losing the previous room", async ({ pag
   expect(secondCode).toMatch(/^[A-Z0-9]{6}$/);
   expect(secondCode).not.toBe(firstCode);
 
-  await page.getByText(/^Rooms · /).click();
-  const firstRoomRow = page.locator(".split-heading").filter({ hasText: `Room ${firstCode}` });
+  const roomsPanel = page.locator("details").filter({ hasText: /^Rooms/ });
+  if (!(await roomsPanel.getAttribute("open"))) {
+    await roomsPanel.locator("summary").click();
+  }
+  await expect(roomsPanel).toHaveAttribute("open", "");
+
+  const firstRoomRow = roomsPanel.locator(".split-heading").filter({ hasText: `Room ${firstCode}` });
   await expect(firstRoomRow.getByRole("button", { name: "Open" })).toBeVisible();
   await firstRoomRow.getByRole("button", { name: "Open" }).click();
 
