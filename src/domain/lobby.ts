@@ -4,6 +4,7 @@ export type LobbyPlayer = {
   seatOrder: number;
   soundType: "builtin" | "custom";
   soundKey: string | null;
+  score: number;
 };
 
 export type BuzzState = {
@@ -15,6 +16,8 @@ export type BuzzState = {
   winnerSoundType: "builtin" | "custom" | null;
   winnerSoundKey: string | null;
   winnerSoundUrl: string | null;
+  scoreResolved: boolean;
+  scoreDelta: number | null;
 };
 
 export type LobbyState = {
@@ -25,8 +28,9 @@ export type LobbyState = {
   players: LobbyPlayer[];
   availableSoundKeys: string[];
   buzz: BuzzState | null;
+  canUndoScore: boolean;
 };
 
-export type PlayerIdentity = LobbyPlayer & {
+export type PlayerIdentity = Omit<LobbyPlayer, "score"> & {
   reconnectToken: string;
 };
