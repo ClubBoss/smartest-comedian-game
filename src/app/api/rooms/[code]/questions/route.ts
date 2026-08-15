@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireHostForRoom } from "@/lib/room-auth";
 
 type SnapshotAsset = {
@@ -9,11 +10,16 @@ type SnapshotAsset = {
   height?: number | null;
 };
 
-async function signQuestionAsset(
-  supabase: Awaited<ReturnType<typeof requireHostForRoom>> extends { supabase: infer T } ? T : never,
-  asset: SnapshotAsset,
-) {
-  if (!asset.storage_path) return { ...asset, previewUrl: null };
+async function signQuestionAsset(supabase: SupabaseClient, asset: SnapshotAsset) {
+  if (!asset.storage_path) return {
+    storagePath: "",
+    mimeType: asset.mime_type ?? null,
+    altText: asset.alt_text ?? null,
+    caption: asset.caption ?? null,
+    width: asset.width ?? null,
+    height: asset.height ?? null,
+    previewUrl: null,
+  };
   const { data } = await supabase.storage
     .from("question-images")
     .createSignedUrl(asset.storage_path, 600);
