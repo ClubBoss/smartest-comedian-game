@@ -34,7 +34,7 @@ export async function GET(
   const [{ data: players, error: playersError }, { data: scoreEvents, error: scoresError }] = await Promise.all([
     supabase
       .from("players")
-      .select("id, display_name, sound_type, sound_key, custom_sound_path, seat_order")
+      .select("id, display_name, sound_type, sound_key, custom_sound_path, seat_order, is_ready")
       .eq("room_id", room.id)
       .is("removed_at", null)
       .order("seat_order", { ascending: true }),
@@ -175,6 +175,7 @@ export async function GET(
       soundKey: player.sound_key,
       seatOrder: player.seat_order,
       score: scoreByPlayer.get(player.id) ?? 0,
+      isReady: player.is_ready,
     })),
     availableSoundKeys: BUILTIN_SOUNDS.map((sound) => sound.key).filter((key) => !usedSoundKeys.has(key)),
     buzz,

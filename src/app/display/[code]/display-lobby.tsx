@@ -2,20 +2,38 @@
 
 import { QrCode } from "@/components/qr-code";
 import { soundLabel } from "@/domain/sounds";
+import { useRoomPresence, type RoomSoundTest } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
 import { playWinnerCue } from "@/lib/buzzer-audio";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export function DisplayLobby({ code }: { code: string }) {
   const { state: lobby } = useRoomState(code);
   const [soundArmed, setSoundArmed] = useState(false);
+  const [soundTestName, setSoundTestName] = useState<string | null>(null);
   const lastPlayedCycle = useRef<string | null>(null);
+  const soundTestTimer = useRef<number | null>(null);
+
+  const handleSoundTest = useCallback((payload: RoomSoundTest) => {
+    setSoundTestName(payload.displayName);
+    if (soundTestTimer.current) window.clearTimeout(soundTestTimer.current);
+    soundTestTimer.current = window.setTimeout(() => setSoundTestName(null), 2500);
+    if (soundArmed) {
+      void playWinnerCue(payload.soundType, payload.soundKey, payload.soundUrl).catch(() => undefined);
+    }
+  }, [soundArmed]);
+
+  const { status: realtimeStatus } = useRoomPresence(code, "display", "shared-display", handleSoundTest);
 
   const joinUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
     return `${window.location.origin}/play/${code}`;
   }, [code]);
+
+  useEffect(() => () => {
+    if (soundTestTimer.current) window.clearTimeout(soundTestTimer.current);
+  }, []);
 
   useEffect(() => {
     const buzz = lobby?.buzz;
@@ -37,6 +55,9 @@ export function DisplayLobby({ code }: { code: string }) {
           <p className="eyebrow">Room</p>
           <div className="display-code">{lobby.code}</div>
           <p>{lobby.playerCount} / {lobby.capacity} players</p>
+          <span className={`status-pill ${realtimeStatus === "realtime" ? "live" : ""}`}>
+            {realtimeStatus === "realtime" ? "Display connected" : "Display reconnecting"}
+          </span>
         </div>
         <div className="display-tools">
           {joinUrl ? <QrCode value={joinUrl} size={150} /> : null}
@@ -45,6 +66,14 @@ export function DisplayLobby({ code }: { code: string }) {
           </button>
         </div>
       </header>
+
+      {soundTestName ? (
+        <section className="buzz-stage locked" aria-live="polite">
+          <p>SOUND CHECK</p>
+          <strong>{soundTestName}</strong>
+          <span>{soundArmed ? "TV sound played" : "Enable sound to hear it"}</span>
+        </section>
+      ) : null}
 
       {question ? (
         <section className={`display-question ${question.answerRevealed ? "answer-shown" : ""}`}>
@@ -83,21 +112,23 @@ export function DisplayLobby({ code }: { code: string }) {
         </section>
       ) : null}
 
-      <section className={`buzz-stage ${lobby.buzz?.status === "open" ? "open" : lobby.buzz?.winnerId ? "locked" : ""}`}>
-        {lobby.buzz?.status === "open" ? (
-          <><p>BUZZERS OPEN</p><strong>GO!</strong></>
-        ) : lobby.buzz?.winnerName ? (
-          <>
-            <p>FIRST</p>
-            <strong>{lobby.buzz.winnerName}</strong>
-            {lobby.buzz.scoreResolved ? (
-              <span className="display-answer-score">Answer: {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</span>
-            ) : lobby.buzz.winnerSource === "host" ? <span>Host override</span> : null}
-          </>
-        ) : (
-          <><p>BUZZER</p><strong>{question?.stimulusRevealed ? "READY" : "WAITING"}</strong></>
-        )}
-      </section>
+      {!soundTestName ? (
+        <section className={`buzz-stage ${lobby.buzz?.status === "open" ? "open" : lobby.buzz?.winnerId ? "locked" : ""}`}>
+          {lobby.buzz?.status === "open" ? (
+            <><p>BUZZERS OPEN</p><strong>GO!</strong></>
+          ) : lobby.buzz?.winnerName ? (
+            <>
+              <p>FIRST</p>
+              <strong>{lobby.buzz.winnerName}</strong>
+              {lobby.buzz.scoreResolved ? (
+                <span className="display-answer-score">Answer: {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</span>
+              ) : lobby.buzz.winnerSource === "host" ? <span>Host override</span> : null}
+            </>
+          ) : (
+            <><p>BUZZER</p><strong>{question?.stimulusRevealed ? "READY" : "WAITING"}</strong></>
+          )}
+        </section>
+      ) : null}
 
       <section className="display-players" aria-label="Scoreboard">
         {lobby.players.map((player) => (
@@ -105,7 +136,7 @@ export function DisplayLobby({ code }: { code: string }) {
             <span className="seat">{player.seatOrder}</span>
             <strong className="display-player-name">{player.displayName}</strong>
             <strong className="display-score" aria-label={`${player.displayName} score`}>{player.score}</strong>
-            <span className="display-sound">{player.soundType === "custom" ? "Custom sound" : soundLabel(player.soundKey)}</span>
+            <span className="display-sound">{player.isReady ? "✓ Ready" : player.soundType === "custom" ? "Custom sound" : soundLabel(player.soundKey)}</span>
           </article>
         ))}
       </section>
