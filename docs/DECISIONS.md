@@ -14,7 +14,7 @@ Questions, ordered hints, answers and metadata are backend content.
 
 ## D-004 - Host remains authoritative
 Status: accepted.
-Software synchronizes state and arbitration; host owns comedic judgment and score overrides.
+Software synchronizes state and arbitration; host owns answer judgment and score overrides.
 
 ## D-005 - Server decides first buzz
 Status: accepted.
@@ -36,17 +36,17 @@ A question may contain text, ordered images, or both; live rounds snapshot media
 Status: accepted.
 Every player has an individual buzzer sound; model supports built-in keys and uploaded short audio.
 
-## D-010 - Wrong-answer reopen is first-class
+## D-010 - Fresh eligibility every buzz cycle
 Status: accepted.
-The host may judge a winner wrong, lock that player out only for subsequent buzz cycles of the same question, and reopen to remaining eligible players.
+A player who answered incorrectly, neutrally, or correctly remains eligible in every later buzz cycle of the same question. A winner only locks everyone else for the current cycle.
 
 ## D-011 - Ordered question queue is V1
 Status: accepted.
 The host can prepare/reorder/skip an ordered queue so live hosting is not interrupted by searching the Question Bank.
 
-## D-012 - Score events carry semantic kind
+## D-012 - Default answer scoring is +1 / 0 / -1
 Status: accepted.
-Score changes are append-only and classified as correct, bonus, penalty or manual; optional reason preserves subjective host awards without hardcoding comedy logic.
+Normal answer resolution uses +1, 0, or -1. Manual arbitrary integer adjustment exists for special questions/situations. Zero-value answer resolution is recorded.
 
 ## D-013 - Answer variants and host notes are snapshot content
 Status: accepted.

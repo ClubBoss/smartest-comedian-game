@@ -15,8 +15,8 @@
 - Realtime notifications are not source of truth; Postgres state is canonical.
 - Question content is separate from live question snapshots.
 - Buzzer ordering is server-authoritative in the normal path, with auditable host override for recovery.
-- Wrong-answer lockout is cycle/question scoped, not global.
-- Scoring is append-only and semantically classified.
+- Eligibility resets on every new buzz cycle; no wrong-answer lockout carries forward.
+- Scoring is append-only and supports zero-value answer events.
 - Media failure cannot corrupt game state.
 - Preloading a question is private until the host reveals its learner-facing stimulus.
 
@@ -50,11 +50,13 @@
 - id UUID PK
 - room_id UUID FK
 - player_id UUID FK
-- kind TEXT: correct | bonus | penalty | manual
-- delta INT
+- kind TEXT: answer | manual
+- delta INT (including zero)
 - reason TEXT NULL
 - reverted_event_id UUID NULL
 - created_at TIMESTAMPTZ
+
+Totals are derived by summing non-reverted events. A zero-value `answer` event records host resolution without changing the total.
 
 ### questions
 - id UUID PK
@@ -108,8 +110,6 @@ Immutable live-round snapshot:
 - started_at TIMESTAMPTZ
 - ended_at TIMESTAMPTZ NULL
 
-Host-only answer/notes are never exposed through learner-facing reads. `stimulus_revealed=false` allows preloading the question privately before putting text/photos on the shared display.
-
 ### buzz_cycles
 - id UUID PK
 - room_id UUID FK
@@ -120,7 +120,7 @@ Host-only answer/notes are never exposed through learner-facing reads. `stimulus
 - winner_received_at TIMESTAMPTZ NULL
 - closed_at TIMESTAMPTZ NULL
 
-Normal winner source is `buzz`. Host recovery may assign/replace the winner and records `winner_source=host`.
+A question may create many buzz cycles. Each cycle starts with every active player eligible again.
 
 ### buzz_attempts
 - id UUID PK
@@ -129,20 +129,17 @@ Normal winner source is `buzz`. Host recovery may assign/replace the winner and 
 - received_at TIMESTAMPTZ
 - unique(cycle, player)
 
-### buzz_cycle_exclusions
-- buzz_cycle_id UUID FK
-- player_id UUID FK
-- reason TEXT
-- PK(cycle, player)
+The uniqueness is cycle-scoped only. The same player may submit again in the next cycle of the same question.
 
 ## Atomic buzz flow
 
-1. Validate player belongs to room and is not excluded.
-2. Record server-received attempt.
-3. Atomically set winner with `winner_source=buzz` only if cycle is open and winner is empty.
-4. Broadcast canonical winner.
-5. Host can explicitly override winner with `winner_source=host` as a recovery action.
-6. Wrong answer may create a new cycle carrying prior wrong-answer exclusions.
+1. Validate player belongs to room and current cycle is open.
+2. Record one server-received attempt for that player in this cycle.
+3. Atomically set winner with `winner_source=buzz` only if cycle has no winner.
+4. Close/lock the cycle after a winner is accepted.
+5. Host resolves the answer and optionally records `+1`, `0`, `-1`, or manual score.
+6. Host can explicitly override winner with `winner_source=host` as recovery.
+7. If the question continues, create a brand-new cycle. No prior-answer exclusion is carried forward.
 
 ## Question/media flow
 

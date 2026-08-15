@@ -3,7 +3,7 @@
 ## Phase 0 - Foundation
 - Product/architecture authority.
 - Next.js/TypeScript/CI shell.
-- Core schema including 2..10 capacity, question images, custom sounds, semantic scoring, queue, buzz attempts/exclusions and immutable question snapshots.
+- Core schema including 2..10 capacity, question images, custom sounds, +1/0/-1/manual scoring, queue, buzz attempts and immutable question snapshots.
 
 Exit: build/lint/typecheck/tests green.
 
@@ -17,23 +17,24 @@ Exit: build/lint/typecheck/tests green.
 Exit: 2/8/10-player E2E.
 
 ## Phase 2 - Realtime Buzzer
-- Open/close/reset.
+- Open/close/reset/reopen cycles.
 - Server-atomic winner.
 - Attempt logging.
-- Wrong-answer lockout + reopen to remaining players.
+- Same-player eligibility restored on every new cycle.
+- Host winner override for recovery.
 - Winner-specific sound.
 - 10-client concurrency stress.
 
-Exit: no multi-winner; exclusions/reopen deterministic.
+Exit: no multi-winner; repeated cycles permit any active player to buzz again.
 
 ## Phase 3 - Scoreboard
-- Append-only score events.
-- Kinds: correct/bonus/penalty/manual.
-- Quick/custom delta + reason.
+- Append-only answer/manual score events.
+- Default +1 / 0 / -1 resolution.
+- Manual arbitrary integer delta + optional reason.
 - Undo.
 - Adaptive 2-10 TV scoreboard.
 
-Exit: canonical totals survive refresh/reconnect.
+Exit: canonical totals and zero-value resolutions survive refresh/reconnect.
 
 ## Phase 4 - Question Bank
 - Text/photo questions.
@@ -46,9 +47,11 @@ Exit: canonical totals survive refresh/reconnect.
 Exit: host creates photo question and queues it without deploy.
 
 ## Phase 5 - Live Question Controller
-- Start queued/manual question.
+- Start queued/manual question privately.
 - Immutable text/media/answer-variant/host-note snapshot.
-- Reveal prompt/images/hints/answer.
+- Explicit reveal of prompt/images/hints/answer.
+- Multiple buzz cycles per question with full re-eligibility each time.
+- Score answer then reopen/continue as many times as host wants.
 - Skip/advance queue.
 
 Exit: complete V1 acceptance scenario.
@@ -59,7 +62,7 @@ Exit: complete V1 acceptance scenario.
 - Audio/media fallback.
 - Host recovery controls.
 - 2/8/10-player scripted gauntlets.
-- Refresh/reconnect, photo, custom sound, wrong-answer reopen and simultaneous-buzz stress.
+- Refresh/reconnect, photo, custom sound, repeated same-player answers and simultaneous-buzz stress.
 
 Exit: full simulated evening needs no database intervention.
 

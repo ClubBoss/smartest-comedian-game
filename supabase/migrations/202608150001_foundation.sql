@@ -42,8 +42,8 @@ create table score_events (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references rooms(id) on delete cascade,
   player_id uuid not null references players(id) on delete cascade,
-  kind text not null default 'manual' check (kind in ('correct', 'bonus', 'penalty', 'manual')),
-  delta integer not null check (delta <> 0),
+  kind text not null default 'answer' check (kind in ('answer', 'manual')),
+  delta integer not null,
   reason text null,
   reverted_event_id uuid null references score_events(id),
   created_at timestamptz not null default now()
@@ -143,13 +143,6 @@ create table buzz_attempts (
   player_id uuid not null references players(id) on delete cascade,
   received_at timestamptz not null default now(),
   unique (buzz_cycle_id, player_id)
-);
-
-create table buzz_cycle_exclusions (
-  buzz_cycle_id uuid not null references buzz_cycles(id) on delete cascade,
-  player_id uuid not null references players(id) on delete cascade,
-  reason text not null default 'wrong_answer',
-  primary key (buzz_cycle_id, player_id)
 );
 
 alter table rooms

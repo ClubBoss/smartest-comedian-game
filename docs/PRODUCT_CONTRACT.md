@@ -12,7 +12,7 @@ A home group needs a low-friction tool to run a comedy quiz game with 2-10 playe
 4. **Questions are content.** Text, photos, hints, answers and metadata are editable without deployments.
 5. **Fast recovery beats rigid automation.** Host gets manual overrides.
 6. **Identity includes sound.** Every active player has an individual buzzer sound.
-7. **Wrong answers can extend comedy.** A wrong answer may lock only that player out while the host reopens the same question to everyone else.
+7. **Players stay in the conversation.** A wrong answer never permanently or temporarily eliminates that player from the question; after the host resolves the answer, a fresh buzz cycle reopens to everyone.
 
 ## 3. Actors
 
@@ -20,13 +20,13 @@ A home group needs a low-friction tool to run a comedy quiz game with 2-10 playe
 - Creates room and sets capacity from 2 to 10.
 - Starts/pauses/ends game.
 - Builds or edits a question queue before/during the game.
-- Selects current question.
+- Selects/preloads current question privately.
 - Opens/closes/resets/reopens buzzer.
-- Can mark a buzz winner wrong and exclude that player from the next buzz cycle for the same question.
-- Reveals hints and answer.
-- Awards/removes arbitrary points.
-- Can classify score events as correct-answer, bonus, penalty or manual.
+- Reveals question stimulus, hints and answer independently.
+- Resolves each answer as `+1`, `0`, or `-1` by default.
+- Can enter any manual score delta for a special question/situation.
 - Can undo latest score changes.
+- Can manually assign/override a buzz winner as recovery.
 - Can remove/reorder players.
 - Manages Question Bank content, including question images.
 
@@ -36,14 +36,14 @@ A home group needs a low-friction tool to run a comedy quiz game with 2-10 playe
 - Chooses an available built-in buzzer sound or uploads a short custom buzzer sound.
 - Active players in one room should have distinct sounds.
 - Sees own score and connection state.
-- Buzzes when enabled and eligible.
-- If ruled wrong, can be locked out from subsequent buzz cycles for that question while others continue.
+- Buzzes when enabled.
+- After any answer result, including `-1`, the same player is eligible again as soon as the host opens a new buzz cycle for that question.
 - Reconnects after refresh without losing identity where possible.
 
 ### Shared Display
 - Shows join QR/code in lobby.
 - Shows scoreboard.
-- Shows question text and/or question images when the host reveals them.
+- Shows question text and/or question images only after host reveal.
 - Shows buzzer state and first accepted player.
 - Plays the winning player's individual buzzer sound when audio is enabled.
 - Shows hints/answer/explanation only according to host reveal state.
@@ -98,34 +98,28 @@ Question Bank is independent from room lifecycle. A live question session snapsh
 - Starting a queued question creates an immutable live snapshot.
 - Queue order is convenience, not authority: the host may select any ready question manually.
 
-## 7. Live-game state machine
+## 7. Buzz-cycle model
 
-Room phases:
+One question can contain any number of buzz cycles.
 
-`LOBBY -> READY -> QUESTION -> BUZZ_OPEN -> BUZZ_LOCKED -> REVEAL -> QUESTION/ENDED`
+1. Host opens a cycle.
+2. All active players are eligible.
+3. First server-accepted buzz wins; all other buttons lock for that cycle.
+4. Host hears the answer and resolves it (`+1`, `0`, `-1`, or manual score).
+5. Host may reveal a hint, continue discussion, or immediately open another cycle.
+6. New cycle means **all active players are eligible again, including the player who just answered**.
+7. The cycle repeats until host reveals/finishes the question.
 
-Host may manually recover backward/forward where safe.
-
-### Buzz arbitration
-
-- Host opens buzzer.
-- Eligible clients submit buzz attempts.
-- Server atomically accepts only the first valid attempt for the current buzz cycle.
-- Client clock is never authoritative.
-- Host can clear/reset.
-- If the winner is wrong, host may start a new buzz cycle for the same question excluding that player (and any earlier wrong players).
-- Exclusion is per question/cycle, not a permanent player penalty.
+Client timestamps never decide the winner. Host can manually override the winner if a device/network issue makes recovery necessary.
 
 ## 8. Scoring
 
-- Default quick actions: -2, -1, +1, +2, +3.
-- Custom numeric adjustment allowed.
-- Score can be negative.
-- Every change is append-only and classified as one of: `correct`, `bonus`, `penalty`, `manual`.
-- Optional free-text reason may explain subjective awards such as a strong argument or funny answer.
+- Default answer buttons: `+1`, `0`, `-1`.
+- `0` is a real recorded resolution even though the total does not change.
+- Manual score adjustment accepts an arbitrary integer for special questions/situations.
+- Every score event is append-only and records whether it came from normal answer resolution or manual adjustment.
+- Optional free-text reason may be stored.
 - Host can undo the latest score transaction without deleting history.
-
-This explicitly supports the show's useful mechanic: points are a social/comedic tool, not only a correctness counter.
 
 ## 9. Individual buzzer sounds
 
@@ -139,11 +133,12 @@ This explicitly supports the show's useful mechanic: points are a social/comedic
 - Audio failure never blocks buzz acceptance or scoring.
 - Host can mute all sounds.
 
-## 10. Realtime expectations
+## 10. Reveal/privacy model
 
-- State changes should normally appear in well under one second on a normal home connection.
-- Correct ordering matters more than absolute millisecond fairness.
-- Reconnect restores canonical room state and buzz eligibility.
+- Selecting/preloading a question does not reveal it to players/display.
+- `stimulus_revealed` controls learner-facing text/image visibility.
+- Hints and answer are independently revealed by the host.
+- Host notes, acceptable variants and canonical answer remain host-only until explicitly revealed where applicable.
 
 ## 11. Non-goals for V1
 
@@ -161,4 +156,4 @@ This explicitly supports the show's useful mechanic: points are a social/comedic
 
 ## 12. V1 acceptance scenario
 
-A host creates a room for 8 players, shares QR, eight people join with distinct buzzer sounds, and the host prepares an ordered queue. A saved text/photo question starts from the queue. The host reveals a hint and opens buzzers. Two or more players press nearly simultaneously; exactly one wins. The display identifies that player and plays their sound. If the answer is wrong, the host marks a penalty if desired and reopens the same question excluding that player. Another player wins, receives a correct/bonus score event, all screens update, then the host reveals the answer and advances. The same flow works with 2 and 10 players.
+A host creates a room for 8 players, shares QR, eight people join with distinct buzzer sounds, and the host prepares an ordered queue. A saved text/photo question is preloaded privately and then revealed. The host opens buzzers. Two or more players press nearly simultaneously; exactly one wins and everyone else locks for that cycle. The display identifies the winner and plays that player's sound. Host resolves the answer as `-1`; then opens a fresh cycle and the same player is eligible again together with everyone else. Another answer receives `0`; the game continues. A later answer receives `+1`, all scores update, then the host reveals the canonical answer and advances. A special question can use a manual score delta. The same flow works with 2 and 10 players.
