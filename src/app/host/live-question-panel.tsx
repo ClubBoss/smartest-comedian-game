@@ -58,7 +58,7 @@ export function LiveQuestionPanel({
 }: {
   code: string;
   hostToken: string;
-  onRoomRefresh: () => Promise<void>;
+  onRoomRefresh: () => Promise<unknown>;
 }) {
   const [state, setState] = useState<AdminState | null>(null);
   const [selectedQuestionId, setSelectedQuestionId] = useState("");
