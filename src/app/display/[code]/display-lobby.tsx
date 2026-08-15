@@ -4,13 +4,14 @@ import { QrCode } from "@/components/qr-code";
 import { soundLabel } from "@/domain/sounds";
 import { useRoomPresence, type RoomSoundTest } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
-import { playWinnerCue } from "@/lib/buzzer-audio";
+import { armBuzzerAudio, playWinnerCue } from "@/lib/buzzer-audio";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export function DisplayLobby({ code }: { code: string }) {
   const { state: lobby } = useRoomState(code);
   const [soundArmed, setSoundArmed] = useState(false);
+  const [soundError, setSoundError] = useState<string | null>(null);
   const [soundTestName, setSoundTestName] = useState<string | null>(null);
   const lastPlayedCycle = useRef<string | null>(null);
   const soundTestTimer = useRef<number | null>(null);
@@ -42,6 +43,16 @@ export function DisplayLobby({ code }: { code: string }) {
     void playWinnerCue(buzz.winnerSoundType, buzz.winnerSoundKey, buzz.winnerSoundUrl).catch(() => undefined);
   }, [lobby?.buzz, soundArmed]);
 
+  async function enableSound() {
+    setSoundError(null);
+    const armed = await armBuzzerAudio();
+    if (!armed) {
+      setSoundError("This browser blocked game audio. Check the TV browser sound permissions and try again.");
+      return;
+    }
+    setSoundArmed(true);
+  }
+
   if (!lobby) {
     return <main className="display-shell center"><h1>Room {code}</h1><p>Waiting for room...</p></main>;
   }
@@ -61,9 +72,10 @@ export function DisplayLobby({ code }: { code: string }) {
         </div>
         <div className="display-tools">
           {joinUrl ? <QrCode value={joinUrl} size={150} /> : null}
-          <button className="sound-arm" onClick={() => setSoundArmed(true)} disabled={soundArmed}>
+          <button className="sound-arm" onClick={() => void enableSound()} disabled={soundArmed}>
             {soundArmed ? "Sound enabled" : "Enable sound"}
           </button>
+          {soundError ? <p className="display-sound-error">{soundError}</p> : null}
         </div>
       </header>
 
