@@ -3,21 +3,24 @@
 import { QrCode } from "@/components/qr-code";
 import type { LobbyState } from "@/domain/lobby";
 import { soundLabel } from "@/domain/sounds";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export function DisplayLobby({ code }: { code: string }) {
   const [lobby, setLobby] = useState<LobbyState | null>(null);
 
-  async function loadLobby() {
+  const loadLobby = useCallback(async () => {
     const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
     if (response.ok) setLobby(await response.json());
-  }
+  }, [code]);
 
   useEffect(() => {
-    void loadLobby();
+    const initial = window.setTimeout(() => void loadLobby(), 0);
     const timer = window.setInterval(() => void loadLobby(), 1000);
-    return () => window.clearInterval(timer);
-  }, [code]);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(timer);
+    };
+  }, [loadLobby]);
 
   const joinUrl = useMemo(() => {
     if (typeof window === "undefined") return "";

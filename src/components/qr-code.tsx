@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 
@@ -22,5 +23,7 @@ export function QrCode({ value, size = 220 }: { value: string; size?: number }) 
     };
   }, [size, value]);
 
-  return src ? <img className="qr" src={src} alt="Join room QR code" /> : null;
+  return src ? (
+    <Image className="qr" src={src} width={size} height={size} unoptimized alt="Join room QR code" />
+  ) : null;
 }

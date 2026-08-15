@@ -3,7 +3,7 @@
 import { QrCode } from "@/components/qr-code";
 import type { LobbyState } from "@/domain/lobby";
 import { soundLabel } from "@/domain/sounds";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const CURRENT_ROOM_KEY = "smartest-host-current-room";
 
@@ -13,25 +13,27 @@ export function HostLobby() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  async function loadLobby(code: string) {
+  const loadLobby = useCallback(async (code: string) => {
     const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
     if (!response.ok) {
       if (response.status === 404) localStorage.removeItem(CURRENT_ROOM_KEY);
       return;
     }
     setLobby(await response.json());
-  }
+  }, []);
 
   useEffect(() => {
     const savedCode = localStorage.getItem(CURRENT_ROOM_KEY);
-    if (savedCode) void loadLobby(savedCode);
-  }, []);
+    if (!savedCode) return;
+    const initial = window.setTimeout(() => void loadLobby(savedCode), 0);
+    return () => window.clearTimeout(initial);
+  }, [loadLobby]);
 
   useEffect(() => {
     if (!lobby?.code) return;
     const timer = window.setInterval(() => void loadLobby(lobby.code), 1000);
     return () => window.clearInterval(timer);
-  }, [lobby?.code]);
+  }, [loadLobby, lobby?.code]);
 
   async function createRoom() {
     setCreating(true);

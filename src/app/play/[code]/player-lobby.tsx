@@ -2,7 +2,7 @@
 
 import type { LobbyState } from "@/domain/lobby";
 import { BUILTIN_SOUNDS, soundLabel } from "@/domain/sounds";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 type Identity = {
   playerId: string;
@@ -23,7 +23,7 @@ export function PlayerLobby({ code }: { code: string }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  async function loadLobby() {
+  const loadLobby = useCallback(async () => {
     const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
     if (!response.ok) {
       setLobby(null);
@@ -33,13 +33,14 @@ export function PlayerLobby({ code }: { code: string }) {
     const next: LobbyState = await response.json();
     setLobby(next);
     setError(null);
-    if (!identity && !next.availableSoundKeys.includes(soundKey) && next.availableSoundKeys[0]) {
-      setSoundKey(next.availableSoundKeys[0]);
-    }
-  }
+    setSoundKey((current) => {
+      if (next.availableSoundKeys.includes(current)) return current;
+      return next.availableSoundKeys[0] ?? current;
+    });
+  }, [code]);
 
   useEffect(() => {
-    void loadLobby();
+    const initial = window.setTimeout(() => void loadLobby(), 0);
     const raw = localStorage.getItem(storageKey);
     if (raw) {
       try {
@@ -56,12 +57,13 @@ export function PlayerLobby({ code }: { code: string }) {
         localStorage.removeItem(storageKey);
       }
     }
-  }, [code, storageKey]);
+    return () => window.clearTimeout(initial);
+  }, [code, loadLobby, storageKey]);
 
   useEffect(() => {
     const timer = window.setInterval(() => void loadLobby(), 1000);
     return () => window.clearInterval(timer);
-  });
+  }, [loadLobby]);
 
   async function join(event: FormEvent) {
     event.preventDefault();
