@@ -1,6 +1,15 @@
 import { BUILTIN_SOUNDS } from "@/domain/sounds";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
+type SnapshotAsset = {
+  storage_path?: string;
+  mime_type?: string;
+  alt_text?: string | null;
+  caption?: string | null;
+  width?: number | null;
+  height?: number | null;
+};
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ code: string }> },
@@ -11,7 +20,7 @@ export async function GET(
 
   const { data: room, error: roomError } = await supabase
     .from("rooms")
-    .select("id, code, capacity, phase, active_buzz_cycle_id")
+    .select("id, code, capacity, phase, active_buzz_cycle_id, current_question_session_id")
     .eq("code", code)
     .is("ended_at", null)
     .maybeSingle();
@@ -20,10 +29,7 @@ export async function GET(
     console.error("Room lookup failed", roomError);
     return Response.json({ error: "Could not load room." }, { status: 500 });
   }
-
-  if (!room) {
-    return Response.json({ error: "Room not found." }, { status: 404 });
-  }
+  if (!room) return Response.json({ error: "Room not found." }, { status: 404 });
 
   const [{ data: players, error: playersError }, { data: scoreEvents, error: scoresError }] = await Promise.all([
     supabase
@@ -38,13 +44,9 @@ export async function GET(
       .eq("room_id", room.id),
   ]);
 
-  if (playersError) {
-    console.error("Player lookup failed", playersError);
-    return Response.json({ error: "Could not load players." }, { status: 500 });
-  }
-  if (scoresError) {
-    console.error("Score lookup failed", scoresError);
-    return Response.json({ error: "Could not load scores." }, { status: 500 });
+  if (playersError || scoresError) {
+    console.error("Room relation lookup failed", playersError ?? scoresError);
+    return Response.json({ error: "Could not load room state." }, { status: 500 });
   }
 
   const activePlayers = players ?? [];
@@ -74,7 +76,6 @@ export async function GET(
       .select("id, winner_player_id, winner_source, closed_at")
       .eq("id", room.active_buzz_cycle_id)
       .maybeSingle();
-
     if (cycleError) {
       console.error("Buzz cycle lookup failed", cycleError);
       return Response.json({ error: "Could not load buzzer state." }, { status: 500 });
@@ -92,12 +93,8 @@ export async function GET(
         winnerSoundUrl = signed?.signedUrl ?? null;
       }
       const activeAnswer = events.find(
-        (event) =>
-          event.kind === "answer" &&
-          event.buzz_cycle_id === cycle.id &&
-          !revertedIds.has(event.id),
+        (event) => event.kind === "answer" && event.buzz_cycle_id === cycle.id && !revertedIds.has(event.id),
       );
-
       buzz = {
         cycleId: cycle.id,
         status: cycle.winner_player_id ? "locked" : cycle.closed_at ? "closed" : "open",
@@ -109,6 +106,59 @@ export async function GET(
         winnerSoundUrl,
         scoreResolved: Boolean(activeAnswer),
         scoreDelta: activeAnswer?.delta ?? null,
+      };
+    }
+  }
+
+  let question = null;
+  if (room.current_question_session_id) {
+    const { data: session, error: sessionError } = await supabase
+      .from("question_sessions")
+      .select("id, prompt_snapshot, answer_snapshot, explanation_snapshot, hints_snapshot, assets_snapshot, stimulus_revealed, revealed_hint_count, answer_revealed, ended_at")
+      .eq("id", room.current_question_session_id)
+      .maybeSingle();
+    if (sessionError) {
+      console.error("Public question lookup failed", sessionError);
+      return Response.json({ error: "Could not load question state." }, { status: 500 });
+    }
+
+    if (session && !session.ended_at) {
+      const allHints = Array.isArray(session.hints_snapshot)
+        ? session.hints_snapshot.filter((hint): hint is string => typeof hint === "string")
+        : [];
+      const rawAssets = session.stimulus_revealed && Array.isArray(session.assets_snapshot)
+        ? (session.assets_snapshot as SnapshotAsset[])
+        : [];
+      const assets = await Promise.all(rawAssets.map(async (asset) => {
+        let url: string | null = null;
+        if (asset.storage_path) {
+          const { data } = await supabase.storage
+            .from("question-images")
+            .createSignedUrl(asset.storage_path, 600);
+          url = data?.signedUrl ?? null;
+        }
+        return {
+          storagePath: asset.storage_path ?? "",
+          mimeType: asset.mime_type ?? null,
+          altText: asset.alt_text ?? null,
+          caption: asset.caption ?? null,
+          width: asset.width ?? null,
+          height: asset.height ?? null,
+          url,
+        };
+      }));
+
+      question = {
+        sessionId: session.id,
+        stimulusRevealed: session.stimulus_revealed,
+        prompt: session.stimulus_revealed ? session.prompt_snapshot : null,
+        assets,
+        revealedHints: session.stimulus_revealed
+          ? allHints.slice(0, session.revealed_hint_count)
+          : [],
+        answerRevealed: session.answer_revealed,
+        answer: session.answer_revealed ? session.answer_snapshot : null,
+        explanation: session.answer_revealed ? session.explanation_snapshot : null,
       };
     }
   }
@@ -126,10 +176,9 @@ export async function GET(
       seatOrder: player.seat_order,
       score: scoreByPlayer.get(player.id) ?? 0,
     })),
-    availableSoundKeys: BUILTIN_SOUNDS.map((sound) => sound.key).filter(
-      (key) => !usedSoundKeys.has(key),
-    ),
+    availableSoundKeys: BUILTIN_SOUNDS.map((sound) => sound.key).filter((key) => !usedSoundKeys.has(key)),
     buzz,
     canUndoScore,
+    question,
   });
 }
