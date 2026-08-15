@@ -3,6 +3,8 @@ export type SupabasePublicEnv = {
   publishableKey: string;
 };
 
+type EnvSource = Record<string, string | undefined>;
+
 function requireValue(name: string, value: string | undefined): string {
   if (!value || value.trim().length === 0) {
     throw new Error(`Missing required environment variable: ${name}`);
@@ -12,7 +14,7 @@ function requireValue(name: string, value: string | undefined): string {
 }
 
 export function readSupabasePublicEnv(
-  env: NodeJS.ProcessEnv = process.env,
+  env: EnvSource = process.env,
 ): SupabasePublicEnv {
   const url = requireValue("NEXT_PUBLIC_SUPABASE_URL", env.NEXT_PUBLIC_SUPABASE_URL);
   const publishableKey = requireValue(
