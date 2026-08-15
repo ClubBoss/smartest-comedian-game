@@ -3,7 +3,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 const ADMIN_KEY = "e2e-question-bank-owner-key";
 const SOUNDS = ["duck", "airhorn", "bell", "gong", "siren", "bike", "kazoo", "whistle"];
 const ONE_PIXEL_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII=",
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII=",
   "base64",
 );
 
@@ -186,6 +186,7 @@ test("canonical 8-player evening completes without database intervention", async
 
   await page.route("**/storage/v1/object/sign/question-images/**", (route) => route.abort());
   await page.goto(`/display/${room.code}`);
+  await page.getByRole("button", { name: "Enable sound" }).click();
   await expect(page.getByRole("heading", { name: "What is shown in this photo?" })).toBeVisible();
   cycle = await openBuzz(request, room);
   await expect(page.getByText("BUZZERS OPEN", { exact: true })).toBeVisible({ timeout: 3000 });
