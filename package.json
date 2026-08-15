@@ -1,0 +1,9 @@
+{
+  "name": "smartest-comedian-game",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Realtime party-game host, buzzer, scoreboard and editable question bank for 2-10 players",
+  "engines": {
+    "node": ">=20"
+  }
+}
