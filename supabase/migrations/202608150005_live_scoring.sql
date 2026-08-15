@@ -13,10 +13,6 @@ alter table public.score_events
     (kind in ('answer', 'manual') and reverted_event_id is null)
   );
 
-alter table public.score_events
-  add constraint score_events_buzz_cycle_fk
-  foreign key (buzz_cycle_id) references public.buzz_cycles(id) on delete set null;
-
 create unique index score_events_one_revert_per_event
   on public.score_events(reverted_event_id)
   where reverted_event_id is not null;
