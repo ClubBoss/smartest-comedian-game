@@ -20,6 +20,27 @@ export type BuzzState = {
   scoreDelta: number | null;
 };
 
+export type PublicQuestionAsset = {
+  storagePath: string;
+  mimeType: string | null;
+  altText: string | null;
+  caption: string | null;
+  width: number | null;
+  height: number | null;
+  url: string | null;
+};
+
+export type PublicQuestionState = {
+  sessionId: string;
+  stimulusRevealed: boolean;
+  prompt: string | null;
+  assets: PublicQuestionAsset[];
+  revealedHints: string[];
+  answerRevealed: boolean;
+  answer: string | null;
+  explanation: string | null;
+};
+
 export type LobbyState = {
   code: string;
   capacity: number;
@@ -29,6 +50,7 @@ export type LobbyState = {
   availableSoundKeys: string[];
   buzz: BuzzState | null;
   canUndoScore: boolean;
+  question: PublicQuestionState | null;
 };
 
 export type PlayerIdentity = Omit<LobbyPlayer, "score"> & {
