@@ -47,18 +47,25 @@ export function DisplayLobby({ code }: { code: string }) {
         {lobby.buzz?.status === "open" ? (
           <><p>BUZZERS OPEN</p><strong>GO!</strong></>
         ) : lobby.buzz?.winnerName ? (
-          <><p>FIRST</p><strong>{lobby.buzz.winnerName}</strong>{lobby.buzz.winnerSource === "host" ? <span>Host override</span> : null}</>
+          <>
+            <p>FIRST</p>
+            <strong>{lobby.buzz.winnerName}</strong>
+            {lobby.buzz.scoreResolved ? (
+              <span className="display-answer-score">Answer: {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</span>
+            ) : lobby.buzz.winnerSource === "host" ? <span>Host override</span> : null}
+          </>
         ) : (
           <><p>BUZZER</p><strong>WAITING</strong></>
         )}
       </section>
 
-      <section className="display-players">
+      <section className="display-players" aria-label="Scoreboard">
         {lobby.players.map((player) => (
           <article className={lobby.buzz?.winnerId === player.id ? "display-player active-winner" : "display-player"} key={player.id}>
             <span className="seat">{player.seatOrder}</span>
-            <strong>{player.displayName}</strong>
-            <span>{player.soundType === "custom" ? "Custom sound" : soundLabel(player.soundKey)}</span>
+            <strong className="display-player-name">{player.displayName}</strong>
+            <strong className="display-score" aria-label={`${player.displayName} score`}>{player.score}</strong>
+            <span className="display-sound">{player.soundType === "custom" ? "Custom sound" : soundLabel(player.soundKey)}</span>
           </article>
         ))}
       </section>
