@@ -42,8 +42,75 @@
   text-align: center;
 }
 
+.host-reactions {
+  border-top: 1px solid #e6e6e6;
+  padding-top: 12px;
+}
+
+.host-reactions summary {
+  cursor: pointer;
+  font-weight: 900;
+  user-select: none;
+}
+
+.host-reaction-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.host-reaction-button {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.host-reaction-button span {
+  font-size: 22px;
+}
+
+.display-reaction {
+  position: fixed;
+  z-index: 20;
+  left: 50%;
+  top: 24px;
+  transform: translateX(-50%);
+  min-width: min(70vw, 420px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 14px 22px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.display-reaction strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.display-reaction span {
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 @media (max-width: 480px) {
   .sound-grid {
     grid-template-columns: 1fr;
+  }
+
+  .host-reaction-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
