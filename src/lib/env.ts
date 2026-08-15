@@ -3,6 +3,10 @@ export type SupabasePublicEnv = {
   publishableKey: string;
 };
 
+export type SupabaseServerEnv = SupabasePublicEnv & {
+  serviceRoleKey: string;
+};
+
 type EnvSource = Record<string, string | undefined>;
 
 function requireValue(name: string, value: string | undefined): string {
@@ -29,4 +33,16 @@ export function readSupabasePublicEnv(
   }
 
   return { url, publishableKey };
+}
+
+export function readSupabaseServerEnv(
+  env: EnvSource = process.env,
+): SupabaseServerEnv {
+  return {
+    ...readSupabasePublicEnv(env),
+    serviceRoleKey: requireValue(
+      "SUPABASE_SERVICE_ROLE_KEY",
+      env.SUPABASE_SERVICE_ROLE_KEY,
+    ),
+  };
 }
