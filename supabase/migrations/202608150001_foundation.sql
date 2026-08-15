@@ -42,6 +42,7 @@ create table score_events (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references rooms(id) on delete cascade,
   player_id uuid not null references players(id) on delete cascade,
+  kind text not null default 'manual' check (kind in ('correct', 'bonus', 'penalty', 'manual')),
   delta integer not null check (delta <> 0),
   reason text null,
   reverted_event_id uuid null references score_events(id),
@@ -52,6 +53,7 @@ create table questions (
   id uuid primary key default gen_random_uuid(),
   prompt text null,
   answer text not null check (char_length(trim(answer)) > 0),
+  answer_variants jsonb not null default '[]'::jsonb,
   explanation text null,
   host_notes text null,
   category text null,
@@ -91,13 +93,25 @@ create table question_tags (
   primary key (question_id, tag)
 );
 
+create table room_question_queue (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references rooms(id) on delete cascade,
+  question_id uuid null references questions(id) on delete set null,
+  position integer not null check (position >= 0),
+  state text not null default 'queued' check (state in ('queued', 'played', 'skipped')),
+  added_at timestamptz not null default now(),
+  unique (room_id, position)
+);
+
 create table question_sessions (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references rooms(id) on delete cascade,
   source_question_id uuid null references questions(id) on delete set null,
   prompt_snapshot text null,
   answer_snapshot text not null,
+  answer_variants_snapshot jsonb not null default '[]'::jsonb,
   explanation_snapshot text null,
+  host_notes_snapshot text null,
   hints_snapshot jsonb not null default '[]'::jsonb,
   assets_snapshot jsonb not null default '[]'::jsonb,
   revealed_hint_count integer not null default 0 check (revealed_hint_count >= 0),
@@ -116,6 +130,21 @@ create table buzz_cycles (
   closed_at timestamptz null
 );
 
+create table buzz_attempts (
+  id uuid primary key default gen_random_uuid(),
+  buzz_cycle_id uuid not null references buzz_cycles(id) on delete cascade,
+  player_id uuid not null references players(id) on delete cascade,
+  received_at timestamptz not null default now(),
+  unique (buzz_cycle_id, player_id)
+);
+
+create table buzz_cycle_exclusions (
+  buzz_cycle_id uuid not null references buzz_cycles(id) on delete cascade,
+  player_id uuid not null references players(id) on delete cascade,
+  reason text not null default 'wrong_answer',
+  primary key (buzz_cycle_id, player_id)
+);
+
 alter table rooms
   add constraint rooms_current_question_session_fk
   foreign key (current_question_session_id) references question_sessions(id) on delete set null;
@@ -129,5 +158,7 @@ create index score_events_room_id_idx on score_events(room_id);
 create index score_events_player_id_idx on score_events(player_id);
 create index question_hints_question_id_idx on question_hints(question_id);
 create index question_assets_question_id_idx on question_assets(question_id);
+create index room_question_queue_room_id_idx on room_question_queue(room_id);
 create index question_sessions_room_id_idx on question_sessions(room_id);
 create index buzz_cycles_room_id_idx on buzz_cycles(room_id);
+create index buzz_attempts_cycle_id_idx on buzz_attempts(buzz_cycle_id);
