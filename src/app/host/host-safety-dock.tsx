@@ -33,23 +33,25 @@ export function HostSafetyDock() {
   useEffect(() => {
     const syncRoom = () => {
       const nextCode = localStorage.getItem(CURRENT_ROOM_KEY);
-      setRoomCode((current) => {
-        if (current !== nextCode) {
-          setLobby(null);
-          setLastSuccessAt(null);
-          setMonitorStartedAt(Date.now());
-          setError(null);
-          setOverridePlayerId("");
-          setManualPlayerId("");
-        }
-        return nextCode;
-      });
+      setRoomCode(nextCode);
       setHostToken(nextCode ? localStorage.getItem(`smartest-host-${nextCode}`) : null);
     };
     syncRoom();
     const interval = window.setInterval(syncRoom, 1000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const reset = window.setTimeout(() => {
+      setLobby(null);
+      setLastSuccessAt(null);
+      setMonitorStartedAt(Date.now());
+      setError(null);
+      setOverridePlayerId("");
+      setManualPlayerId("");
+    }, 0);
+    return () => window.clearTimeout(reset);
+  }, [roomCode]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
