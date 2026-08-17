@@ -5,7 +5,7 @@ import { HOST_REACTIONS, hostReactionLabel } from "@/domain/reactions";
 import { soundLabel } from "@/domain/sounds";
 import { useRoomPresence, type RoomReaction, type RoomSoundTest } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
-import { armBuzzerAudio, playWinnerCue } from "@/lib/buzzer-audio";
+import { armBuzzerAudio, playWinnerCue } from "@/lib/buzzer-audio-natural";
 import { playHostReaction } from "@/lib/reaction-audio";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -78,9 +78,13 @@ export function DisplayLobby({ code }: { code: string }) {
 
   const question = lobby.question;
   const reaction = reactionKey ? HOST_REACTIONS.find((item) => item.key === reactionKey) ?? null : null;
+  const livePriority = lobby.buzz?.status === "open" || Boolean(lobby.buzz?.winnerId);
 
   return (
-    <main className="display-shell stack">
+    <main
+      className={`display-shell stack ${livePriority ? "display-live-priority" : ""}`}
+      data-display-priority={livePriority ? "buzz" : "question"}
+    >
       <header className="display-header">
         <div>
           <p className="eyebrow">Room</p>
