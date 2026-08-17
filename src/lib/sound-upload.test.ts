@@ -16,6 +16,17 @@ describe("resolveSoundUploadFormat", () => {
     });
   });
 
+  it("accepts browser MediaRecorder WebM audio", () => {
+    expect(resolveSoundUploadFormat("host-recording.webm", "audio/webm;codecs=opus")).toEqual({
+      extension: "webm",
+      contentType: "audio/webm",
+    });
+    expect(resolveSoundUploadFormat("host-recording.webm", "application/octet-stream")).toEqual({
+      extension: "webm",
+      contentType: "audio/webm",
+    });
+  });
+
   it("normalizes the existing supported formats", () => {
     expect(resolveSoundUploadFormat("sound.mp3", "audio/mpeg")?.extension).toBe("mp3");
     expect(resolveSoundUploadFormat("sound.wav", "audio/x-wav")?.extension).toBe("wav");
