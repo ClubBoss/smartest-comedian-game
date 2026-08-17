@@ -111,8 +111,10 @@ export function LiveQuestionPanel({
   }, [load]);
 
   const queued = useMemo(
-    () => (state?.queue ?? []).filter((item) => item.state === "queued"),
-    [state?.queue],
+    () => (state?.queue ?? []).filter(
+      (item) => item.state === "queued" && item.id !== state?.current?.queueItemId,
+    ),
+    [state?.current?.queueItemId, state?.queue],
   );
 
   useEffect(() => {
