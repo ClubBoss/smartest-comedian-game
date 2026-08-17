@@ -48,6 +48,12 @@ async function hostAction(request: APIRequestContext, room: Room, action: string
   return response;
 }
 
+async function publicState(request: APIRequestContext, room: Room) {
+  const response = await request.get(`/api/rooms/${room.code}`);
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
 async function privateState(request: APIRequestContext, room: Room) {
   const response = await request.get(`/api/rooms/${room.code}/questions`, {
     headers: { "x-host-token": room.hostToken },
@@ -74,11 +80,41 @@ test("iPhone Voice Memos M4A MIME uploads as a custom buzzer", async ({ request 
   });
 
   expect(upload.ok()).toBeTruthy();
-  const stateResponse = await request.get(`/api/rooms/${room.code}`);
-  expect(stateResponse.ok()).toBeTruthy();
-  const state = await stateResponse.json();
+  const state = await publicState(request, room);
   expect(state.players[0].soundType).toBe("custom");
   expect(state.players[0].soundKey).toBeNull();
+});
+
+test("host can assign browser-recorded WebM, test it, then replace it with a premade", async ({ request }) => {
+  const room = await createRoom(request, 2);
+  const player = await join(request, room, 0);
+
+  const upload = await request.post(`/api/rooms/${room.code}/players/${player.playerId}/sound`, {
+    headers: { "x-host-token": room.hostToken },
+    multipart: {
+      sound: {
+        name: "host-recording.webm",
+        mimeType: "audio/webm;codecs=opus",
+        buffer: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81]),
+      },
+    },
+  });
+  expect(upload.ok()).toBeTruthy();
+  expect((await publicState(request, room)).players[0].soundType).toBe("custom");
+
+  const soundTest = await request.post(`/api/rooms/${room.code}/players/${player.playerId}/sound-test`, {
+    headers: { "x-host-token": room.hostToken },
+  });
+  expect(soundTest.ok()).toBeTruthy();
+
+  const assignPremade = await request.patch(`/api/rooms/${room.code}/players/${player.playerId}/sound`, {
+    headers: { "x-host-token": room.hostToken },
+    data: { soundKey: "airhorn" },
+  });
+  expect(assignPremade.ok()).toBeTruthy();
+  const finalState = await publicState(request, room);
+  expect(finalState.players[0].soundType).toBe("builtin");
+  expect(finalState.players[0].soundKey).toBe("airhorn");
 });
 
 test("Game Mode can reorder future questions while one question is already live", async ({ request, page }) => {
@@ -127,6 +163,79 @@ test("Game Mode can reorder future questions while one question is already live"
   }
 });
 
+test("answer score is drafted, can be discarded, and only changes score after confirm", async ({ request, page }) => {
+  const room = await createRoom(request, 2);
+  const players = [await join(request, room, 0), await join(request, room, 1)];
+  const question = await saveQuestion(request, "Flexible score question");
+  await hostAction(request, room, "start", { questionId: question.id });
+  await hostAction(request, room, "reveal-stimulus");
+
+  const open = await request.post(`/api/rooms/${room.code}/buzz/open`, {
+    headers: { "x-host-token": room.hostToken },
+  });
+  expect(open.ok()).toBeTruthy();
+  const openedState = await publicState(request, room);
+  const claim = await request.post(`/api/rooms/${room.code}/buzz/claim`, {
+    headers: { "x-player-token": players[0].reconnectToken },
+    data: { playerId: players[0].playerId, cycleId: openedState.buzz.cycleId },
+  });
+  expect(claim.ok()).toBeTruthy();
+
+  await page.goto("/host");
+  await page.evaluate(({ code, hostToken }) => {
+    localStorage.setItem("smartest-host-current-room", code);
+    localStorage.setItem(`smartest-host-${code}`, hostToken);
+  }, room);
+  await page.reload();
+  await page.getByRole("button", { name: "Enter Game Mode" }).click();
+
+  await page.getByRole("button", { name: "+1", exact: true }).click();
+  await page.getByRole("button", { name: "+1", exact: true }).click();
+  await expect(page.getByText("Pending: +2", { exact: true })).toBeVisible();
+  expect((await publicState(request, room)).players[0].score).toBe(0);
+
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByText("Choose a score", { exact: true })).toBeVisible();
+  expect((await publicState(request, room)).players[0].score).toBe(0);
+
+  await page.getByRole("button", { name: "+1", exact: true }).click();
+  await page.getByRole("button", { name: "+1", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm +2", exact: true }).click();
+
+  await expect.poll(async () => {
+    const state = await publicState(request, room);
+    return {
+      score: state.players.find((player: { id: string }) => player.id === players[0].playerId)?.score,
+      scoreResolved: state.buzz?.scoreResolved,
+      scoreDelta: state.buzz?.scoreDelta,
+    };
+  }).toEqual({ score: 2, scoreResolved: true, scoreDelta: 2 });
+});
+
+test("TV keeps active question and scoreboard above room join service content", async ({ request, page }) => {
+  const room = await createRoom(request, 4);
+  for (let index = 0; index < 4; index += 1) await join(request, room, index);
+  const question = await saveQuestion(request, "Главный вопрос должен быть сверху", {
+    hints: ["Подсказка один", "Подсказка два"],
+  });
+  await hostAction(request, room, "start", { questionId: question.id });
+  await hostAction(request, room, "reveal-stimulus");
+
+  await page.setViewportSize({ width: 2048, height: 1170 });
+  await page.goto(`/display/${room.code}`);
+  await expect(page.locator("main[data-display-priority='question']")).toBeVisible();
+
+  const questionBox = await page.locator(".display-question").boundingBox();
+  const scoreboardBox = await page.locator(".display-players").boundingBox();
+  const headerBox = await page.locator(".display-header").boundingBox();
+  expect(questionBox).not.toBeNull();
+  expect(scoreboardBox).not.toBeNull();
+  expect(headerBox).not.toBeNull();
+  expect(questionBox?.y ?? 0).toBeLessThan(scoreboardBox?.y ?? 0);
+  expect(scoreboardBox?.y ?? 0).toBeLessThan(headerBox?.y ?? 0);
+  expect((scoreboardBox?.y ?? 0) + (scoreboardBox?.height ?? 0)).toBeLessThanOrEqual(1170);
+});
+
 test("TV prioritizes FIRST and scoreboard within the first viewport after a buzz", async ({ request, page }) => {
   const room = await createRoom(request, 4);
   const players: Player[] = [];
@@ -147,10 +256,10 @@ test("TV prioritizes FIRST and scoreboard within the first viewport after a buzz
     headers: { "x-host-token": room.hostToken },
   });
   expect(open.ok()).toBeTruthy();
-  const publicState = await (await request.get(`/api/rooms/${room.code}`)).json();
+  const state = await publicState(request, room);
   const win = await request.post(`/api/rooms/${room.code}/buzz/claim`, {
     headers: { "x-player-token": players[3].reconnectToken },
-    data: { playerId: players[3].playerId, cycleId: publicState.buzz.cycleId },
+    data: { playerId: players[3].playerId, cycleId: state.buzz.cycleId },
   });
   expect(win.ok()).toBeTruthy();
 
@@ -163,11 +272,14 @@ test("TV prioritizes FIRST and scoreboard within the first viewport after a buzz
   const buzzBox = await page.locator(".buzz-stage").boundingBox();
   const scoreboardBox = await page.locator(".display-players").boundingBox();
   const questionBox = await page.locator(".display-question").boundingBox();
+  const headerBox = await page.locator(".display-header").boundingBox();
   expect(buzzBox).not.toBeNull();
   expect(scoreboardBox).not.toBeNull();
   expect(questionBox).not.toBeNull();
+  expect(headerBox).not.toBeNull();
   expect((buzzBox?.y ?? 0) + (buzzBox?.height ?? 0)).toBeLessThanOrEqual(1170);
   expect((scoreboardBox?.y ?? 0) + (scoreboardBox?.height ?? 0)).toBeLessThanOrEqual(1170);
   expect(questionBox?.y ?? 0).toBeGreaterThan(scoreboardBox?.y ?? 0);
+  expect(headerBox?.y ?? 0).toBeGreaterThan(questionBox?.y ?? 0);
   await expect(page.getByRole("heading", { name: "Мы едем в Грузию?" })).toBeAttached();
 });
