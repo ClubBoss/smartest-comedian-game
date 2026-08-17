@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 type WakeLockSentinelLike = {
   release: () => Promise<void>;
+  addEventListener?: (type: "release", listener: () => void, options?: AddEventListenerOptions) => void;
 };
 
 type WakeLockNavigator = Navigator & {
@@ -24,7 +25,16 @@ export function ScreenWakeLock({ enabled = true }: { enabled?: boolean }) {
     const acquire = async () => {
       if (!active || document.visibilityState !== "visible" || sentinel) return;
       try {
-        sentinel = await wakeLock.request("screen");
+        const acquired = await wakeLock.request("screen");
+        if (!active) {
+          void acquired.release().catch(() => undefined);
+          return;
+        }
+        sentinel = acquired;
+        acquired.addEventListener?.("release", () => {
+          if (sentinel === acquired) sentinel = null;
+          if (active && document.visibilityState === "visible") void acquire();
+        }, { once: true });
       } catch {
         sentinel = null;
       }
@@ -40,7 +50,9 @@ export function ScreenWakeLock({ enabled = true }: { enabled?: boolean }) {
     return () => {
       active = false;
       document.removeEventListener("visibilitychange", onVisibility);
-      if (sentinel) void sentinel.release().catch(() => undefined);
+      const current = sentinel;
+      sentinel = null;
+      if (current) void current.release().catch(() => undefined);
     };
   }, [enabled]);
 
