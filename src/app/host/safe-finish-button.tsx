@@ -13,24 +13,21 @@ export function SafeFinishButton({
   answerRevealed: boolean;
   onFinish: () => Promise<unknown> | void;
 }) {
-  const [confirmingEarlyFinish, setConfirmingEarlyFinish] = useState(false);
-
-  useEffect(() => {
-    setConfirmingEarlyFinish(false);
-  }, [sessionId, answerRevealed]);
+  const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
+  const confirmingEarlyFinish = !answerRevealed && confirmingSessionId === sessionId;
 
   useEffect(() => {
     if (!confirmingEarlyFinish) return;
-    const timeout = window.setTimeout(() => setConfirmingEarlyFinish(false), 5000);
+    const timeout = window.setTimeout(() => setConfirmingSessionId(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [confirmingEarlyFinish]);
 
   const finish = () => {
     if (!answerRevealed && !confirmingEarlyFinish) {
-      setConfirmingEarlyFinish(true);
+      setConfirmingSessionId(sessionId);
       return;
     }
-    setConfirmingEarlyFinish(false);
+    setConfirmingSessionId(null);
     void onFinish();
   };
 
