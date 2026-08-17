@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(22);
 
 select has_function('public', 'resolve_answer_score_atomic', array['uuid', 'uuid', 'uuid', 'integer'], 'answer score RPC exists');
 select has_function('public', 'add_manual_score_atomic', array['uuid', 'uuid', 'integer', 'text'], 'manual score RPC exists');
@@ -30,12 +30,20 @@ select lives_ok($$select resolve_answer_score_atomic((select id from rooms where
 select is((select count(*) from score_events se join rooms r on r.id = se.room_id where r.code = 'SCORE2' and se.delta = 0), 1::bigint, 'zero answer is persisted as an event');
 select lives_ok($$select open_buzz_cycle_atomic((select id from rooms where code = 'SCORE2'))$$, 'host can advance to a fresh buzz cycle');
 select throws_ok($$select resolve_answer_score_atomic((select id from rooms where code = 'SCORE2'), (select p.id from players p join rooms r on r.id = p.room_id where r.code = 'SCORE2' and p.display_name = 'One'), (select old_cycle from score_test_context), -1)$$, 'P0001', 'ERR_STALE_CYCLE', 'ordinary scoring cannot target an old buzz cycle');
+
+select * from claim_buzz_atomic(
+  (select active_buzz_cycle_id from rooms where code = 'SCORE2'),
+  (select p.id from players p join rooms r on r.id = p.room_id where r.code = 'SCORE2' and p.display_name = 'One')
+);
+select lives_ok($$select resolve_answer_score_atomic((select id from rooms where code = 'SCORE2'), (select p.id from players p join rooms r on r.id = p.room_id where r.code = 'SCORE2' and p.display_name = 'One'), (select active_buzz_cycle_id from rooms where code = 'SCORE2'), 2)$$, 'confirmed answer score accepts +2 in one event');
+select is((select sum(delta) from score_events se join players p on p.id = se.player_id join rooms r on r.id = se.room_id where r.code = 'SCORE2' and p.display_name = 'One'), 2::bigint, 'multi-point answer affects winner total atomically');
+select lives_ok($$select * from undo_latest_score_atomic((select id from rooms where code = 'SCORE2'))$$, 'multi-point answer can be undone as one score event');
+
 select lives_ok($$select add_manual_score_atomic((select id from rooms where code = 'SCORE2'), (select p.id from players p join rooms r on r.id = p.room_id where r.code = 'SCORE2' and p.display_name = 'Two'), 7, 'special question')$$, 'manual arbitrary integer adjustment works');
 select is((select sum(delta) from score_events se join players p on p.id = se.player_id join rooms r on r.id = se.room_id where r.code = 'SCORE2' and p.display_name = 'Two'), 7::bigint, 'manual score affects selected player');
-select throws_ok($$select resolve_answer_score_atomic((select id from rooms where code = 'SCORE2'), (select p.id from players p join rooms r on r.id = p.room_id where r.code = 'SCORE2' and p.display_name = 'One'), (select active_buzz_cycle_id from rooms where code = 'SCORE2'), 2)$$, 'P0001', 'ERR_INVALID_ANSWER_DELTA', 'ordinary answer score only accepts -1 0 +1');
 select lives_ok($$select * from undo_latest_score_atomic((select id from rooms where code = 'SCORE2'))$$, 'manual adjustment can be undone');
 select is((select sum(delta) from score_events se join players p on p.id = se.player_id join rooms r on r.id = se.room_id where r.code = 'SCORE2' and p.display_name = 'Two'), 0::bigint, 'undo restores manual-adjusted player total');
-select is((select count(*) from score_events where kind = 'revert'), 2::bigint, 'two undo events preserve append-only audit history');
+select is((select count(*) from score_events where kind = 'revert'), 3::bigint, 'three undo events preserve append-only audit history');
 
 select * from finish();
 rollback;
