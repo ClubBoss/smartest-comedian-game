@@ -5,6 +5,7 @@ import { soundLabel } from "@/domain/sounds";
 import { useRoomPresence } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
 import { useEffect, useMemo, useState } from "react";
+import { HostSoundSetup } from "./host-sound-setup";
 import { HostTvPreview } from "./host-tv-preview";
 import { LiveQuestionPanel, type QuestionReadiness } from "./live-question-panel";
 
@@ -26,6 +27,7 @@ export function HostLobby() {
   const [manualDelta, setManualDelta] = useState(1);
   const [manualReason, setManualReason] = useState("");
   const [gameMode, setGameMode] = useState(false);
+  const [answerScoreDraft, setAnswerScoreDraft] = useState<{ cycleId: string | null; delta: number | null }>({ cycleId: null, delta: null });
   const [questionReadiness, setQuestionReadiness] = useState<QuestionReadiness>({ readyQuestions: 0, queued: 0, current: false });
   const { state: lobby, error, refresh } = useRoomState(roomCode);
   const { status: realtimeStatus, presence } = useRoomPresence(roomCode, roomCode ? "host" : null, "host-console");
@@ -117,13 +119,30 @@ export function HostLobby() {
     return true;
   }
 
-  async function scoreAnswer(delta: -1 | 0 | 1) {
-    if (!lobby?.buzz?.winnerId) return;
-    await postHost("score/answer", {
-      playerId: lobby.buzz.winnerId,
-      cycleId: lobby.buzz.cycleId,
-      delta,
+  function adjustAnswerScore(step: -1 | 1) {
+    const cycleId = lobby?.buzz?.cycleId ?? null;
+    if (!cycleId || lobby?.buzz?.scoreResolved) return;
+    setAnswerScoreDraft((current) => ({
+      cycleId,
+      delta: (current.cycleId === cycleId && current.delta !== null ? current.delta : 0) + step,
+    }));
+  }
+
+  function setZeroAnswerScore() {
+    const cycleId = lobby?.buzz?.cycleId ?? null;
+    if (!cycleId || lobby?.buzz?.scoreResolved) return;
+    setAnswerScoreDraft({ cycleId, delta: 0 });
+  }
+
+  async function confirmAnswerScore() {
+    const buzz = lobby?.buzz;
+    if (!buzz?.winnerId || answerScoreDraft.cycleId !== buzz.cycleId || answerScoreDraft.delta === null) return;
+    const ok = await postHost("score/answer", {
+      playerId: buzz.winnerId,
+      cycleId: buzz.cycleId,
+      delta: answerScoreDraft.delta,
     });
+    if (ok) setAnswerScoreDraft({ cycleId: buzz.cycleId, delta: null });
   }
 
   async function applyManualScore() {
@@ -172,6 +191,7 @@ export function HostLobby() {
   const winner = lobby.buzz?.winnerId
     ? lobby.players.find((player) => player.id === lobby.buzz?.winnerId) ?? null
     : null;
+  const pendingAnswerDelta = answerScoreDraft.cycleId === lobby.buzz?.cycleId ? answerScoreDraft.delta : null;
   const readyCount = lobby.players.filter((player) => player.isReady).length;
   const allPlayersReady = lobby.playerCount >= 2 && readyCount === lobby.playerCount;
   const questionPrepared = questionReadiness.current || questionReadiness.queued > 0 || questionReadiness.readyQuestions > 0;
@@ -185,7 +205,7 @@ export function HostLobby() {
       : buzzOpen
         ? "Wait for the first buzz"
         : winner && !lobby.buzz?.scoreResolved
-          ? `Score ${winner.displayName}'s answer`
+          ? `Choose and confirm ${winner.displayName}'s score`
           : winner && lobby.buzz?.scoreResolved
             ? "Reopen the buzzer or continue the question"
             : lobby.question.answerRevealed
@@ -233,6 +253,16 @@ export function HostLobby() {
           </section>
         ) : null}
 
+        {!gameMode && hostToken ? (
+          <HostSoundSetup
+            code={lobby.code}
+            hostToken={hostToken}
+            players={lobby.players}
+            availableSoundKeys={lobby.availableSoundKeys}
+            onRefresh={refresh}
+          />
+        ) : null}
+
         <section className="host-next-action" aria-live="polite">
           <div><p className="eyebrow">Next action</p><strong>{nextAction}</strong></div>
           <span className="status-pill">{gameMode ? "LIVE FLOW" : "GUIDANCE"}</span>
@@ -266,22 +296,43 @@ export function HostLobby() {
                 <div>
                   <p className="eyebrow">Answer score</p>
                   <h2>{winner.displayName} · {winner.score}</h2>
+                  {!lobby.buzz?.scoreResolved ? <p className="muted compact">Build the score first. Nothing changes until you confirm.</p> : null}
                 </div>
-                {lobby.buzz?.scoreResolved ? <span className="status-pill">Recorded {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</span> : null}
+                {lobby.buzz?.scoreResolved ? (
+                  <span className="status-pill">Recorded {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</span>
+                ) : pendingAnswerDelta !== null ? (
+                  <span className="status-pill live">Pending {pendingAnswerDelta > 0 ? "+" : ""}{pendingAnswerDelta}</span>
+                ) : <span className="status-pill">Not scored</span>}
               </div>
               <div className="answer-score-actions">
-                {([-1, 0, 1] as const).map((delta) => (
-                  <button
-                    key={delta}
-                    data-host-hotkey={delta === -1 ? "-" : String(delta)}
-                    className={delta === 1 ? "primary score-button next-action" : "secondary score-button"}
-                    disabled={Boolean(lobby.buzz?.scoreResolved)}
-                    onClick={() => void scoreAnswer(delta)}
-                  >
-                    {delta > 0 ? "+1" : delta}
-                  </button>
-                ))}
+                <button
+                  data-host-hotkey="-"
+                  className="secondary score-button"
+                  disabled={Boolean(lobby.buzz?.scoreResolved)}
+                  onClick={() => adjustAnswerScore(-1)}
+                >-1</button>
+                <button
+                  data-host-hotkey="0"
+                  className="secondary score-button"
+                  disabled={Boolean(lobby.buzz?.scoreResolved)}
+                  onClick={setZeroAnswerScore}
+                >0</button>
+                <button
+                  data-host-hotkey="1"
+                  className="primary score-button next-action"
+                  disabled={Boolean(lobby.buzz?.scoreResolved)}
+                  onClick={() => adjustAnswerScore(1)}
+                >+1</button>
               </div>
+              {!lobby.buzz?.scoreResolved ? (
+                <div className="answer-score-confirm">
+                  <strong className="answer-score-pending">{pendingAnswerDelta === null ? "Choose a score" : `Pending: ${pendingAnswerDelta > 0 ? "+" : ""}${pendingAnswerDelta}`}</strong>
+                  <button className="primary" disabled={pendingAnswerDelta === null} onClick={() => void confirmAnswerScore()}>
+                    {pendingAnswerDelta === null ? "Confirm score" : `Confirm ${pendingAnswerDelta > 0 ? "+" : ""}${pendingAnswerDelta}`}
+                  </button>
+                  <button className="secondary" disabled={pendingAnswerDelta === null} onClick={() => setAnswerScoreDraft({ cycleId: lobby.buzz?.cycleId ?? null, delta: null })}>Discard</button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -300,7 +351,7 @@ export function HostLobby() {
         <HostTvPreview lobby={lobby} />
 
         <section className="host-hotkeys" aria-label="Host keyboard shortcuts">
-          <span><kbd>Space</kbd>open/reopen</span><span><kbd>1</kbd>+1</span><span><kbd>0</kbd>0</span><span><kbd>-</kbd>-1</span><span><kbd>H</kbd>hint</span><span><kbd>A</kbd>answer</span><span><kbd>N</kbd>next/finish</span>
+          <span><kbd>Space</kbd>open/reopen</span><span><kbd>1</kbd>+1 draft</span><span><kbd>0</kbd>zero draft</span><span><kbd>-</kbd>-1 draft</span><span><kbd>H</kbd>hint</span><span><kbd>A</kbd>answer</span><span><kbd>N</kbd>next/finish</span>
         </section>
 
         <div className="host-secondary-admin stack">
