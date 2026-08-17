@@ -11,21 +11,29 @@ type SoundSetupPlayer = {
   soundKey: string | null;
 };
 
+type RecordingExtension = "webm" | "m4a" | "ogg" | "wav" | "mp3";
+
 type RecordingDraft = {
   blob: Blob;
   url: string;
   mimeType: string;
-  extension: "webm" | "m4a" | "ogg" | "wav";
+  extension: RecordingExtension;
 };
 
 const MAX_RECORDING_MS = 8_000;
 const MAX_SOUND_BYTES = 1_572_864;
 
-function extensionForMime(mimeType: string): RecordingDraft["extension"] {
+function extensionForBlob(mimeType: string, fileName = ""): RecordingExtension {
   const type = mimeType.toLowerCase();
+  if (type.includes("mpeg") || type.includes("mp3")) return "mp3";
   if (type.includes("mp4") || type.includes("m4a")) return "m4a";
   if (type.includes("ogg")) return "ogg";
   if (type.includes("wav")) return "wav";
+  if (type.includes("webm")) return "webm";
+  const extension = fileName.trim().toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  if (extension === "mp3" || extension === "m4a" || extension === "ogg" || extension === "wav" || extension === "webm") {
+    return extension;
+  }
   return "webm";
 }
 
@@ -51,7 +59,7 @@ export function HostSoundSetup({
   hostToken: string;
   players: SoundSetupPlayer[];
   availableSoundKeys: string[];
-  onRefresh: () => Promise<void>;
+  onRefresh: () => Promise<unknown>;
 }) {
   const [drafts, setDrafts] = useState<Record<string, RecordingDraft>>({});
   const [recordingPlayerId, setRecordingPlayerId] = useState<string | null>(null);
@@ -70,7 +78,7 @@ export function HostSoundSetup({
     recorderRef.current = null;
   }
 
-  function replaceDraft(playerId: string, blob: Blob, mimeType: string) {
+  function replaceDraft(playerId: string, blob: Blob, mimeType: string, fileName = "") {
     if (blob.size < 1) {
       setError("The recording was empty. Try again and speak closer to the microphone.");
       return;
@@ -93,7 +101,7 @@ export function HostSoundSetup({
           blob,
           url,
           mimeType,
-          extension: extensionForMime(mimeType),
+          extension: extensionForBlob(mimeType, fileName),
         },
       };
     });
@@ -237,7 +245,7 @@ export function HostSoundSetup({
       setError("Custom sound must be at most 1.5 MB.");
       return;
     }
-    replaceDraft(playerId, file, file.type || "application/octet-stream");
+    replaceDraft(playerId, file, file.type || "application/octet-stream", file.name);
   }
 
   const customCount = players.filter((player) => player.soundType === "custom").length;
@@ -254,26 +262,29 @@ export function HostSoundSetup({
       </div>
 
       {players.length === 0 ? <p className="muted">Players will appear here after they join.</p> : null}
-      <div className="host-sound-player-list">
+      <div className="player-list host-sound-player-list">
         {players.map((player) => {
           const draft = drafts[player.id];
           const recording = recordingPlayerId === player.id;
           const busy = busyPlayerId === player.id;
           return (
-            <article className="host-sound-player" key={player.id}>
-              <div className="host-sound-player-heading">
-                <span className="seat">{player.seatOrder}</span>
-                <div>
-                  <strong>{player.displayName}</strong>
-                  <small>{player.soundType === "custom" ? "🎙 Custom recording" : `${soundEmoji(player.soundKey)} ${soundLabel(player.soundKey)}`}</small>
+            <article className="stack host-sound-player" key={player.id} style={{ padding: "14px 0", borderTop: "1px solid #eee" }}>
+              <div className="split-heading">
+                <div className="host-sound-player-heading" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="seat">{player.seatOrder}</span>
+                  <div>
+                    <strong>{player.displayName}</strong>
+                    <small style={{ display: "block", color: "#666", marginTop: 3 }}>{player.soundType === "custom" ? "🎙 Custom recording" : `${soundEmoji(player.soundKey)} ${soundLabel(player.soundKey)}`}</small>
+                  </div>
                 </div>
               </div>
 
-              <div className="host-sound-controls">
+              <div className="host-sound-controls" style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) repeat(3, auto)", gap: 8 }}>
                 <select
                   aria-label={`Premade sound for ${player.displayName}`}
                   value={player.soundType === "builtin" ? player.soundKey ?? "" : ""}
                   disabled={busy || recording}
+                  style={{ minHeight: 46, border: "1px solid #cfcfcf", borderRadius: 10, padding: "10px 12px", background: "#fff" }}
                   onChange={(event) => void assignBuiltin(player.id, event.target.value)}
                 >
                   <option value="">{player.soundType === "custom" ? "Custom sound active" : "Choose premade…"}</option>
@@ -303,11 +314,11 @@ export function HostSoundSetup({
                 </label>
               </div>
 
-              {recording ? <p className="host-recording-live" role="status">● Recording {player.displayName} — stops automatically after 8 seconds</p> : null}
+              {recording ? <p className="error" role="status">● Recording {player.displayName} — stops automatically after 8 seconds</p> : null}
               {draft ? (
-                <div className="host-recording-draft">
+                <div className="host-actions host-recording-draft" style={{ gridTemplateColumns: "minmax(120px, 1fr) repeat(4, auto)", alignItems: "center" }}>
                   <strong>New sound ready</strong>
-                  <button className="secondary" onClick={() => void new Audio(draft.url).play()}>▶ Preview</button>
+                  <button className="secondary" onClick={() => void new Audio(draft.url).play().catch(() => undefined)}>▶ Preview</button>
                   <button className="primary" disabled={busy || Boolean(recordingPlayerId)} onClick={() => void assignCustom(player.id, draft)}>{busy ? "Assigning…" : "Assign"}</button>
                   <button className="secondary" disabled={busy || Boolean(recordingPlayerId)} onClick={() => void startRecording(player.id)}>Re-record</button>
                   <button className="secondary" disabled={busy || recording} onClick={() => discardDraft(player.id)}>Discard</button>
