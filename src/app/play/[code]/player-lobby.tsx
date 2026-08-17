@@ -3,7 +3,7 @@
 import { BUILTIN_SOUNDS, soundEmoji, soundLabel } from "@/domain/sounds";
 import { useRoomPresence } from "@/hooks/use-room-presence";
 import { useRoomState } from "@/hooks/use-room-state";
-import { playBuiltInCue } from "@/lib/buzzer-audio";
+import { playBuiltInCue } from "@/lib/buzzer-audio-natural";
 import { FormEvent, useEffect, useState } from "react";
 
 type Identity = {
@@ -261,7 +261,7 @@ export function PlayerLobby({ code }: { code: string }) {
             {uploading ? "Uploading..." : "Upload custom sound"}
             <input
               type="file"
-              accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4"
+              accept="audio/*,audio/m4a,audio/x-m4a,.m4a,.mp3,.wav,.ogg"
               disabled={uploading}
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -269,7 +269,7 @@ export function PlayerLobby({ code }: { code: string }) {
               }}
             />
           </label>
-          <p className="tiny muted">MP3, WAV, OGG or M4A, up to 1.5 MB. Failed uploads leave your current sound unchanged.</p>
+          <p className="tiny muted">MP3, WAV, OGG or M4A / iPhone Voice Memo, up to 1.5 MB. Failed uploads leave your current sound unchanged.</p>
           {error ? <p className="error">{error}</p> : null}
         </section>
       </main>
