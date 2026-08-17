@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HostPackControls } from "./host-pack-controls";
+import { HostQueueEditor } from "./host-queue-editor";
 
 type ReadyQuestion = {
   id: string;
@@ -110,8 +111,10 @@ export function LiveQuestionPanel({
   }, [load]);
 
   const queued = useMemo(
-    () => (state?.queue ?? []).filter((item) => item.state === "queued"),
-    [state?.queue],
+    () => (state?.queue ?? []).filter(
+      (item) => item.state === "queued" && item.id !== state?.current?.queueItemId,
+    ),
+    [state?.current?.queueItemId, state?.queue],
   );
 
   useEffect(() => {
@@ -212,6 +215,19 @@ export function LiveQuestionPanel({
           <button className="secondary" data-host-hotkey="a" disabled={busy || current.answerRevealed || !current.stimulusRevealed} onClick={() => void act("reveal-answer")}>Reveal answer</button>
           <button className="secondary" data-host-hotkey="n" disabled={busy} onClick={() => void act("finish")}>Finish question</button>
         </div>
+
+        {gameMode ? (
+          <HostQueueEditor
+            readyQuestions={state.readyQuestions}
+            queued={queued}
+            selectedQuestionId={selectedQuestionId}
+            onSelectQuestion={setSelectedQuestionId}
+            busy={busy}
+            currentActive
+            act={act}
+          />
+        ) : null}
+
         {!current.stimulusRevealed ? <p className="muted compact">TV and players cannot see the prompt, photos, hints or answer yet. Buzzer is intentionally blocked until Show question.</p> : null}
         {error ? <p className="error">{error}</p> : null}
       </section>
@@ -225,7 +241,16 @@ export function LiveQuestionPanel({
           <div><p className="eyebrow">Next question</p><h2>{queued[0]?.prompt || (queued.length > 0 ? "Image-led question" : "Queue is empty")}</h2><p className="muted compact">{queued.length} queued</p></div>
           <button className="primary next-action" data-host-hotkey="n" disabled={busy || queued.length === 0} onClick={() => void act("start-next")}>Preload next</button>
         </div>
-        {queued.length === 0 ? <p className="muted compact">Exit Game Mode to choose Ready questions and build the queue.</p> : null}
+        <HostQueueEditor
+          readyQuestions={state.readyQuestions}
+          queued={queued}
+          selectedQuestionId={selectedQuestionId}
+          onSelectQuestion={setSelectedQuestionId}
+          busy={busy}
+          currentActive={false}
+          defaultOpen
+          act={act}
+        />
         {error ? <p className="error">{error}</p> : null}
       </section>
     );
