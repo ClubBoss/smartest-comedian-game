@@ -67,6 +67,12 @@ h1, h2, p { margin-top: 0; }
 .question-picker-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; }
 .queue-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #eee; }
 .mini-actions, .live-question-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.game-queue-editor { border: 1px solid #d9d9d9; border-radius: 14px; background: #fafafa; overflow: hidden; }
+.game-queue-editor summary { min-height: 48px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; list-style-position: inside; }
+.game-queue-editor summary span { color: #666; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.game-queue-editor-body { padding: 14px; border-top: 1px solid #e4e4e4; }
+.game-queue-list { gap: 0; }
+.queue-bank-link { display: grid; place-items: center; text-decoration: none; white-space: nowrap; }
 .host-private-answer { border-radius: 14px; background: #171717; color: #fff; padding: 16px; }
 .host-private-answer .eyebrow { color: #aaa; }
 .host-private-answer strong { display: block; font-size: 24px; margin-bottom: 8px; }
@@ -121,6 +127,27 @@ h1, h2, p { margin-top: 0; }
 .display-player.active-winner { border-color: #fff; background: #303030; }
 .display-waiting { text-align: center; font-size: 32px; color: #aaa; margin-top: 48px; }
 
+/* During the buzzer race the TV must surface the winner and scoreboard before
+   the long question/answer card. Before the buzzer opens, natural document
+   order still keeps the question as the dominant surface. */
+.display-live-priority { min-height: 100vh; padding: 24px 32px; gap: 12px; }
+.display-live-priority .display-header { order: 0; align-items: start; }
+.display-live-priority .buzz-stage { order: 1; min-height: 150px; padding: 16px; }
+.display-live-priority .display-players { order: 2; gap: 10px; }
+.display-live-priority .display-question { order: 3; padding: clamp(16px, 2vw, 28px); gap: 14px; }
+.display-live-priority .display-code { font-size: clamp(42px, 6vw, 72px); }
+.display-live-priority .display-tools .qr { width: 110px; height: 110px; }
+.display-live-priority .buzz-stage strong { font-size: clamp(48px, 7vw, 94px); }
+.display-live-priority .display-player { padding: 12px 14px; border-radius: 14px; }
+.display-live-priority .display-player-name { font-size: 20px; }
+.display-live-priority .display-score { font-size: clamp(30px, 3vw, 44px); }
+.display-live-priority .display-sound { font-size: 12px; }
+.display-live-priority .display-hints { gap: 6px; }
+.display-live-priority .display-hints p { padding: 8px 12px; font-size: clamp(16px, 1.5vw, 22px); }
+.display-live-priority .display-reveal { padding-top: 14px; }
+.display-live-priority .display-reveal strong { font-size: clamp(34px, 4vw, 58px); }
+.display-live-priority .display-reveal div { margin-top: 8px; font-size: clamp(16px, 1.7vw, 24px); }
+
 @media (max-width: 720px) {
   main { padding: 24px 16px; }
   .lobby-grid { grid-template-columns: 1fr; }
@@ -132,4 +159,5 @@ h1, h2, p { margin-top: 0; }
   .host-actions, .override-row, .manual-score-grid, .question-picker-row { grid-template-columns: 1fr; }
   .queue-row { grid-template-columns: 34px 1fr; }
   .queue-row .mini-actions { grid-column: 2; }
+  .queue-bank-link { white-space: normal; }
 }
