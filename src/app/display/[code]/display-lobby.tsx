@@ -79,13 +79,14 @@ export function DisplayLobby({ code }: { code: string }) {
   const question = lobby.question;
   const reaction = reactionKey ? HOST_REACTIONS.find((item) => item.key === reactionKey) ?? null : null;
   const livePriority = lobby.buzz?.status === "open" || Boolean(lobby.buzz?.winnerId);
+  const setupPriority = !question;
 
   return (
     <main
       className={`display-shell stack ${livePriority ? "display-live-priority" : ""}`}
-      data-display-priority={livePriority ? "buzz" : "question"}
+      data-display-priority={livePriority ? "buzz" : question ? "question" : "setup"}
     >
-      <header className="display-header">
+      <header className="display-header" style={{ order: setupPriority ? 0 : 4 }}>
         <div>
           <p className="eyebrow">Room</p>
           <div className="display-code">{lobby.code}</div>
@@ -104,14 +105,14 @@ export function DisplayLobby({ code }: { code: string }) {
       </header>
 
       {reaction ? (
-        <section className="display-reaction" aria-live="polite">
+        <section className="display-reaction" aria-live="polite" style={{ order: -1 }}>
           <strong aria-hidden="true">{reaction.emoji}</strong>
           <span>{hostReactionLabel(reaction.key)}</span>
         </section>
       ) : null}
 
       {soundTestName ? (
-        <section className="buzz-stage locked" aria-live="polite">
+        <section className="buzz-stage locked" aria-live="polite" style={{ order: setupPriority ? 1 : 2 }}>
           <p>SOUND CHECK</p>
           <strong>{soundTestName}</strong>
           <span>{soundArmed ? "TV sound played" : "Enable sound to hear it"}</span>
@@ -119,7 +120,10 @@ export function DisplayLobby({ code }: { code: string }) {
       ) : null}
 
       {question ? (
-        <section className={`display-question ${question.answerRevealed ? "answer-shown" : ""}`}>
+        <section
+          className={`display-question ${question.answerRevealed ? "answer-shown" : ""}`}
+          style={{ order: livePriority ? 3 : 0 }}
+        >
           {!question.stimulusRevealed ? (
             <div className="display-question-ready">
               <p>QUESTION READY</p>
@@ -156,7 +160,10 @@ export function DisplayLobby({ code }: { code: string }) {
       ) : null}
 
       {!soundTestName ? (
-        <section className={`buzz-stage ${lobby.buzz?.status === "open" ? "open" : lobby.buzz?.winnerId ? "locked" : ""}`}>
+        <section
+          className={`buzz-stage ${lobby.buzz?.status === "open" ? "open" : lobby.buzz?.winnerId ? "locked" : ""}`}
+          style={{ order: livePriority ? 1 : setupPriority ? 1 : 2 }}
+        >
           {lobby.buzz?.status === "open" ? (
             <><p>BUZZERS OPEN</p><strong>GO!</strong></>
           ) : lobby.buzz?.winnerName ? (
@@ -173,7 +180,7 @@ export function DisplayLobby({ code }: { code: string }) {
         </section>
       ) : null}
 
-      <section className="display-players" aria-label="Scoreboard">
+      <section className="display-players" aria-label="Scoreboard" style={{ order: livePriority ? 2 : setupPriority ? 2 : 1 }}>
         {lobby.players.map((player) => (
           <article className={lobby.buzz?.winnerId === player.id ? "display-player active-winner" : "display-player"} key={player.id}>
             <span className="seat">{player.seatOrder}</span>
@@ -183,7 +190,7 @@ export function DisplayLobby({ code }: { code: string }) {
           </article>
         ))}
       </section>
-      {lobby.players.length === 0 ? <p className="display-waiting">Scan the QR to join</p> : null}
+      {lobby.players.length === 0 ? <p className="display-waiting" style={{ order: 3 }}>Scan the QR to join</p> : null}
     </main>
   );
 }

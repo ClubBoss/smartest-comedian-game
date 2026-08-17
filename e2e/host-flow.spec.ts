@@ -102,10 +102,16 @@ test("host game mode guides, hotkeys, preflight and TV preview through a live an
     data: { playerId: p1.playerId, cycleId: firstCycle },
   });
   expect(claim.ok()).toBeTruthy();
-  await expect(host.getByText("Score HostFlow One's answer")).toBeVisible({ timeout: 10_000 });
+  await expect(host.getByText("Choose and confirm HostFlow One's score")).toBeVisible({ timeout: 10_000 });
 
   await host.keyboard.press("1");
-  await expect(host.getByRole("button", { name: "REOPEN BUZZER" })).toBeVisible({ timeout: 10_000 });
+  await expect(host.getByText("Pending: +1", { exact: true })).toBeVisible();
+  roomResponse = await request.get(`/api/rooms/${room.code}`);
+  roomState = await roomResponse.json();
+  expect(roomState.players.find((player: { id: string }) => player.id === p1.playerId).score).toBe(0);
+
+  await host.getByRole("button", { name: "Confirm +1", exact: true }).click();
+  await expect(host.getByText("Recorded +1", { exact: true })).toBeVisible({ timeout: 10_000 });
   roomResponse = await request.get(`/api/rooms/${room.code}`);
   roomState = await roomResponse.json();
   expect(roomState.players.find((player: { id: string }) => player.id === p1.playerId).score).toBe(1);
