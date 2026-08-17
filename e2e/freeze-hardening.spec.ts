@@ -94,9 +94,7 @@ test("early Finish requires a second action while normal revealed-answer finish 
   await hostAction(request, room, "start", { questionId: normalQuestion.id });
   await hostAction(request, room, "reveal-stimulus");
   await hostAction(request, room, "reveal-answer");
-  windowDispatchRefresh: {
-    await page.evaluate(() => window.dispatchEvent(new Event("smartest-live-question-refresh")));
-  }
+  await page.evaluate(() => window.dispatchEvent(new Event("smartest-live-question-refresh")));
   await expect(page.getByRole("heading", { name: "Normal finish after answer" })).toBeVisible();
   await page.getByRole("button", { name: "Finish question" }).click();
   await expect.poll(async () => (await privateState(request, room)).current).toBeNull();
@@ -162,12 +160,12 @@ test("Host and TV request screen Wake Lock when the browser supports it", async 
   const room = await createRoom(request);
 
   await page.addInitScript(() => {
-    const trackedWindow = window as typeof window & { __wakeLockRequests?: number };
     Object.defineProperty(navigator, "wakeLock", {
       configurable: true,
       value: {
         request: async () => {
-          trackedWindow.__wakeLockRequests = (trackedWindow.__wakeLockRequests ?? 0) + 1;
+          const current = Number(localStorage.getItem("__wakeLockRequests") ?? "0");
+          localStorage.setItem("__wakeLockRequests", String(current + 1));
           return { release: async () => undefined };
         },
       },
@@ -175,9 +173,9 @@ test("Host and TV request screen Wake Lock when the browser supports it", async 
   });
 
   await page.goto("/host");
-  await expect.poll(async () => page.evaluate(() => (window as typeof window & { __wakeLockRequests?: number }).__wakeLockRequests ?? 0)).toBeGreaterThan(0);
-  const afterHost = await page.evaluate(() => (window as typeof window & { __wakeLockRequests?: number }).__wakeLockRequests ?? 0);
+  await expect.poll(async () => page.evaluate(() => Number(localStorage.getItem("__wakeLockRequests") ?? "0"))).toBeGreaterThan(0);
+  const afterHost = await page.evaluate(() => Number(localStorage.getItem("__wakeLockRequests") ?? "0"));
 
   await page.goto(`/display/${room.code}`);
-  await expect.poll(async () => page.evaluate(() => (window as typeof window & { __wakeLockRequests?: number }).__wakeLockRequests ?? 0)).toBeGreaterThan(afterHost);
+  await expect.poll(async () => page.evaluate(() => Number(localStorage.getItem("__wakeLockRequests") ?? "0"))).toBeGreaterThan(afterHost);
 });
