@@ -1,5 +1,5 @@
 export type SoundUploadFormat = {
-  extension: "mp3" | "wav" | "ogg" | "m4a";
+  extension: "mp3" | "wav" | "ogg" | "m4a" | "webm";
   contentType: string;
 };
 
@@ -13,6 +13,7 @@ const MIME_FORMATS = new Map<string, SoundUploadFormat>([
   ["audio/mp4", { extension: "m4a", contentType: "audio/mp4" }],
   ["audio/m4a", { extension: "m4a", contentType: "audio/mp4" }],
   ["audio/x-m4a", { extension: "m4a", contentType: "audio/mp4" }],
+  ["audio/webm", { extension: "webm", contentType: "audio/webm" }],
 ]);
 
 const GENERIC_TYPES = new Set(["", "application/octet-stream"]);
@@ -43,5 +44,6 @@ export function resolveSoundUploadFormat(fileName: string, rawType: string): Sou
   if (extension === "mp3") return { extension: "mp3", contentType: "audio/mpeg" };
   if (extension === "wav") return { extension: "wav", contentType: "audio/wav" };
   if (extension === "ogg") return { extension: "ogg", contentType: "audio/ogg" };
+  if (extension === "webm") return { extension: "webm", contentType: "audio/webm" };
   return null;
 }
