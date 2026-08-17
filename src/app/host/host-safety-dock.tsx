@@ -76,9 +76,12 @@ export function HostSafetyDock() {
 
   useEffect(() => {
     if (!roomCode) return;
-    void refreshState();
+    const initial = window.setTimeout(() => void refreshState(), 0);
     const interval = window.setInterval(() => void refreshState(), 5000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
   }, [refreshState, roomCode]);
 
   const ageSeconds = Math.max(0, Math.floor((now - (lastSuccessAt ?? monitorStartedAt)) / 1000));
