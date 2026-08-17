@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 type ReadyQuestion = {
   id: string;
   prompt: string | null;
@@ -34,8 +36,14 @@ export function HostQueueEditor({
   defaultOpen?: boolean;
   act: QueueAction;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <details className="game-queue-editor" defaultOpen={defaultOpen}>
+    <details
+      className="game-queue-editor"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary>
         <strong>Queue controls</strong>
         <span>{queued.length} queued</span>
