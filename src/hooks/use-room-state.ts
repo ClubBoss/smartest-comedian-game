@@ -7,23 +7,34 @@ import { useCallback, useEffect, useState } from "react";
 export function useRoomState(code: string | null) {
   const [state, setState] = useState<LobbyState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     if (!code) return null;
-    const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
-    if (!response.ok) {
-      setError(response.status === 404 ? "Room not found." : "Could not load room.");
+    try {
+      const response = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
+      if (!response.ok) {
+        setError(response.status === 404 ? "Room not found." : "Could not load room.");
+        return null;
+      }
+      const next = (await response.json()) as LobbyState;
+      setState(next);
+      setError(null);
+      setLastUpdatedAt(Date.now());
+      return next;
+    } catch {
+      setError("Could not reach room. Keeping the last known state while reconnecting.");
       return null;
     }
-    const next = (await response.json()) as LobbyState;
-    setState(next);
-    setError(null);
-    return next;
   }, [code]);
 
   useEffect(() => {
     if (!code) {
-      const clear = window.setTimeout(() => setState(null), 0);
+      const clear = window.setTimeout(() => {
+        setState(null);
+        setError(null);
+        setLastUpdatedAt(null);
+      }, 0);
       return () => window.clearTimeout(clear);
     }
 
@@ -42,5 +53,5 @@ export function useRoomState(code: string | null) {
     };
   }, [code, refresh]);
 
-  return { state, error, refresh, setState };
+  return { state, error, refresh, setState, lastUpdatedAt };
 }

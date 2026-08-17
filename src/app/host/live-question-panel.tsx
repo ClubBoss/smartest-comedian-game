@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HostPackControls } from "./host-pack-controls";
 import { HostQueueEditor } from "./host-queue-editor";
+import { SafeFinishButton } from "./safe-finish-button";
 
 type ReadyQuestion = {
   id: string;
@@ -213,7 +214,12 @@ export function LiveQuestionPanel({
           <button className={`primary ${!current.stimulusRevealed ? "next-action" : ""}`} data-host-hotkey="show" disabled={busy || current.stimulusRevealed} onClick={() => void act("reveal-stimulus")}>Show question</button>
           <button className="secondary" data-host-hotkey="h" disabled={busy || !canRevealHint} onClick={() => void act("reveal-hint")}>Reveal next hint</button>
           <button className="secondary" data-host-hotkey="a" disabled={busy || current.answerRevealed || !current.stimulusRevealed} onClick={() => void act("reveal-answer")}>Reveal answer</button>
-          <button className="secondary" data-host-hotkey="n" disabled={busy} onClick={() => void act("finish")}>Finish question</button>
+          <SafeFinishButton
+            sessionId={current.sessionId}
+            busy={busy}
+            answerRevealed={current.answerRevealed}
+            onFinish={() => act("finish")}
+          />
         </div>
 
         {gameMode ? (

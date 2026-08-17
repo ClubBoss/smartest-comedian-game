@@ -1,3 +1,4 @@
+import { ScreenWakeLock } from "@/components/screen-wake-lock";
 import { DisplayLobby } from "./display-lobby";
 
 export default async function DisplayPage({
@@ -6,5 +7,10 @@ export default async function DisplayPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  return <DisplayLobby code={code.toUpperCase()} />;
+  return (
+    <>
+      <ScreenWakeLock />
+      <DisplayLobby code={code.toUpperCase()} />
+    </>
+  );
 }

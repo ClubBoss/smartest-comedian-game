@@ -200,16 +200,52 @@ jobs:
 
           retry_get "$LIVE_URL/" /tmp/root.html
           retry_get "$LIVE_URL/host" /tmp/host.html
-          retry_get "$LIVE_URL/api/health" /tmp/health.json
 
-          TARGET_SHA="$TARGET_SHA" node <<'NODE'
-          const fs = require("node:fs");
-          const health = JSON.parse(fs.readFileSync("/tmp/health.json", "utf8"));
+          LIVE_URL="$LIVE_URL" TARGET_SHA="$TARGET_SHA" node <<'NODE'
           const expected = process.env.TARGET_SHA;
-          if (health.ok !== true) throw new Error(`Health is not OK: ${JSON.stringify(health)}`);
-          if (health.database !== "ok") throw new Error(`Database health failed: ${JSON.stringify(health)}`);
-          if (health.buildSha !== expected) throw new Error(`SHA mismatch: expected ${expected}, observed ${health.buildSha}`);
-          console.log(`Verified Cloudflare Worker + Supabase at exact SHA ${expected}`);
+          const healthUrl = `${process.env.LIVE_URL}/api/health`;
+          const attempts = 12;
+
+          async function sleep(ms) {
+            await new Promise((resolve) => setTimeout(resolve, ms));
+          }
+
+          (async () => {
+            let lastObserved = "no response";
+            for (let attempt = 1; attempt <= attempts; attempt += 1) {
+              try {
+                const response = await fetch(healthUrl, {
+                  redirect: "follow",
+                  signal: AbortSignal.timeout(20_000),
+                  headers: { "cache-control": "no-cache" },
+                });
+                if (response.ok) {
+                  const health = await response.json();
+                  lastObserved = JSON.stringify({
+                    ok: health.ok,
+                    database: health.database,
+                    buildSha: health.buildSha,
+                  });
+                  if (health.ok === true && health.database === "ok" && health.buildSha === expected) {
+                    console.log(`Verified Cloudflare Worker + Supabase at exact SHA ${expected} on attempt ${attempt}`);
+                    return;
+                  }
+                } else {
+                  lastObserved = `HTTP ${response.status}`;
+                }
+              } catch (error) {
+                lastObserved = error instanceof Error ? error.message : String(error);
+              }
+
+              console.log(`Exact-SHA propagation check ${attempt}/${attempts}: ${lastObserved}`);
+              if (attempt < attempts) await sleep(5_000);
+            }
+
+            throw new Error(`Remote health never converged to exact SHA ${expected}; last observed: ${lastObserved}`);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
           NODE
 
           {
@@ -219,5 +255,5 @@ jobs:
             echo "- exact_sha: \`$TARGET_SHA\`"
             echo "- root: PASS"
             echo "- host: PASS"
-            echo "- Supabase health: PASS"
+            echo "- Supabase health + exact SHA: PASS"
           } >> "$GITHUB_STEP_SUMMARY"
