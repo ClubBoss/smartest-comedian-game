@@ -1,16 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { broadcastRoomRefresh } from "@/lib/room-events";
+import { resolveSoundUploadFormat } from "@/lib/sound-upload";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { tokenMatches } from "@/lib/tokens";
 
 const MAX_SOUND_BYTES = 1_572_864;
-const ALLOWED_TYPES = new Map([
-  ["audio/mpeg", "mp3"],
-  ["audio/wav", "wav"],
-  ["audio/x-wav", "wav"],
-  ["audio/ogg", "ogg"],
-  ["audio/mp4", "m4a"],
-]);
 
 export async function POST(
   request: Request,
@@ -29,8 +23,8 @@ export async function POST(
     return Response.json({ error: "Choose an audio file." }, { status: 400 });
   }
 
-  const extension = ALLOWED_TYPES.get(file.type);
-  if (!extension) {
+  const format = resolveSoundUploadFormat(file.name, file.type);
+  if (!format) {
     return Response.json({ error: "Use MP3, WAV, OGG, or M4A audio." }, { status: 400 });
   }
 
@@ -60,11 +54,11 @@ export async function POST(
     return Response.json({ error: "Player token is invalid." }, { status: 401 });
   }
 
-  const path = `${room.id}/${player.id}/${randomUUID()}.${extension}`;
+  const path = `${room.id}/${player.id}/${randomUUID()}.${format.extension}`;
   const bytes = await file.arrayBuffer();
   const { error: uploadError } = await supabase.storage
     .from("buzzer-sounds")
-    .upload(path, bytes, { contentType: file.type, upsert: false });
+    .upload(path, bytes, { contentType: format.contentType, upsert: false });
 
   if (uploadError) {
     console.error("Custom sound upload failed", uploadError);
@@ -77,7 +71,7 @@ export async function POST(
       sound_type: "custom",
       sound_key: null,
       custom_sound_path: path,
-      custom_sound_mime_type: file.type,
+      custom_sound_mime_type: format.contentType,
     })
     .eq("id", player.id);
 
