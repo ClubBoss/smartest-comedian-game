@@ -112,9 +112,12 @@ test("Game Mode can reorder future questions while one question is already live"
   await expect(editor.getByRole("link", { name: /Edit question bank/ })).toHaveAttribute("target", "_blank");
 
   await editor.getByRole("button", { name: "Move Future question B up" }).click();
-  const state = await privateState(request, room);
-  const queued = state.queue.filter((item: { state: string }) => item.state === "queued");
-  expect(queued.map((item: { questionId: string }) => item.questionId)).toEqual([third.id, second.id]);
+  await expect.poll(async () => {
+    const state = await privateState(request, room);
+    return state.queue
+      .filter((item: { state: string }) => item.state === "queued")
+      .map((item: { questionId: string }) => item.questionId);
+  }).toEqual([third.id, second.id]);
 
   for (const preload of await editor.getByRole("button", { name: "Preload" }).all()) {
     await expect(preload).toBeDisabled();
