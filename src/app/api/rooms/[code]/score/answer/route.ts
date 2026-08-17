@@ -20,9 +20,10 @@ export async function POST(
     typeof body.playerId !== "string" ||
     typeof body.cycleId !== "string" ||
     !Number.isInteger(body.delta) ||
-    ![-1, 0, 1].includes(body.delta as number)
+    (body.delta as number) < -99 ||
+    (body.delta as number) > 99
   ) {
-    return Response.json({ error: "Answer score must be -1, 0 or +1 for the current winner." }, { status: 400 });
+    return Response.json({ error: "Answer score must be a whole number from -99 to +99 for the current winner." }, { status: 400 });
   }
 
   const { data, error } = await auth.supabase.rpc("resolve_answer_score_atomic", {
