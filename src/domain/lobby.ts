@@ -72,6 +72,7 @@ export type TournamentPublicState = {
   finalPayout: number | null;
   doubleAttempted: boolean;
   doubleCorrect: boolean | null;
+  doubleResolved: boolean;
   activePlayerIds: string[];
   members: TournamentMemberState[];
 };
