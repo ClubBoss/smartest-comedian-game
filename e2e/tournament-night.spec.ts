@@ -150,8 +150,9 @@ test("League 8 isolates A/B/Final scores and gates inactive buzzers", async ({ r
 
   await page.goto(`/display/${room.code}`);
   await expect(page.getByText("FINAL FOUR", { exact: true })).toBeVisible();
-  await expect(page.getByText(players[0].displayName, { exact: true })).toBeVisible();
-  await expect(page.getByText(players[4].displayName, { exact: true })).toBeVisible();
-  await expect(page.getByText(players[2].displayName, { exact: true })).toHaveCount(0);
-  await expect(page.getByText(players[6].displayName, { exact: true })).toHaveCount(0);
+  const scoreboard = page.getByLabel("Scoreboard");
+  await expect(scoreboard.getByText(players[0].displayName, { exact: true })).toBeVisible();
+  await expect(scoreboard.getByText(players[4].displayName, { exact: true })).toBeVisible();
+  await expect(scoreboard.getByText(players[2].displayName, { exact: true })).toHaveCount(0);
+  await expect(scoreboard.getByText(players[6].displayName, { exact: true })).toHaveCount(0);
 });
