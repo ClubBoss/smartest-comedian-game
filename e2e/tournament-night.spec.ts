@@ -68,6 +68,13 @@ async function manualScore(request: APIRequestContext, room: Room, playerId: str
   expect(response.ok()).toBeTruthy();
 }
 
+async function closeBuzz(request: APIRequestContext, room: Room) {
+  const response = await request.post(`/api/rooms/${room.code}/buzz/close`, {
+    headers: { "x-host-token": room.hostToken },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
 async function advance(
   request: APIRequestContext,
   room: Room,
@@ -160,6 +167,18 @@ test("League 8 isolates A/B/Final scores and gates inactive buzzers", async ({ r
   expect(activeBuzz.ok()).toBeTruthy();
   expect((await activeBuzz.json()).accepted).toBe(true);
 
+  const blockedAdvance = await request.post(`/api/rooms/${room.code}/tournament/advance`, {
+    headers: { "x-host-token": room.hostToken },
+    data: {
+      tournamentId,
+      stage: "qualifier_a",
+      advancingPlayerIds: [players[0].playerId, players[1].playerId],
+    },
+  });
+  expect(blockedAdvance.status()).toBe(409);
+  expect((await blockedAdvance.json()).error).toContain("Finish the current question and buzzer cycle");
+
+  await closeBuzz(request, room);
   await manualScore(request, room, players[0].playerId, 3);
   await manualScore(request, room, players[1].playerId, 2);
   await advance(request, room, tournamentId, "qualifier_a", [players[0].playerId, players[1].playerId]);
