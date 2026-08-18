@@ -27,15 +27,15 @@ function sortMembers(members: TournamentMemberState[]) {
 }
 
 export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props) {
-  const [groupAIds, setGroupAIds] = useState<string[]>([]);
+  const [groupAIds, setGroupAIds] = useState<string[] | null>(null);
   const [selectedAdvancers, setSelectedAdvancers] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [advanceArmed, setAdvanceArmed] = useState(false);
 
   const allPlayerIds = useMemo(() => lobby.players.map((player) => player.id), [lobby.players]);
-  const explicitGroupAIsValid = groupAIds.length === 4 && groupAIds.every((id) => allPlayerIds.includes(id));
-  const effectiveGroupAIds = explicitGroupAIsValid ? groupAIds : allPlayerIds.slice(0, 4);
+  const defaultGroupAIds = allPlayerIds.slice(0, 4);
+  const effectiveGroupAIds = (groupAIds ?? defaultGroupAIds).filter((id) => allPlayerIds.includes(id));
   const groupBIds = allPlayerIds.filter((id) => !effectiveGroupAIds.includes(id));
 
   async function postTournament(path: string, body: object) {
@@ -132,7 +132,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
               })}
             </div>
             <div className="lobby-grid">
-              <div className="card compact-card"><p className="eyebrow">Group A</p><strong>{effectiveGroupAIds.map((id) => playerName(lobby, id)).join(" · ")}</strong></div>
+              <div className="card compact-card"><p className="eyebrow">Group A</p><strong>{effectiveGroupAIds.map((id) => playerName(lobby, id)).join(" · ") || "Choose 4 players"}</strong></div>
               <div className="card compact-card"><p className="eyebrow">Group B</p><strong>{groupBIds.map((id) => playerName(lobby, id)).join(" · ")}</strong></div>
             </div>
             <button className="primary" disabled={busy || effectiveGroupAIds.length !== 4 || groupBIds.length !== 4} onClick={() => void startTournament()}>
