@@ -31,6 +31,12 @@ export async function POST(
     if (error.message.includes("ERR_STALE_CYCLE")) {
       return Response.json({ error: "Buzzer cycle is no longer active." }, { status: 409 });
     }
+    if (error.message.includes("ERR_TOURNAMENT_PLAYER_INACTIVE")) {
+      return Response.json({ error: "Your tournament group is not active right now." }, { status: 409 });
+    }
+    if (error.message.includes("ERR_PLAYER_NOT_ELIGIBLE")) {
+      return Response.json({ error: "You are not eligible to buzz in this room." }, { status: 409 });
+    }
     console.error("Buzz claim failed", error);
     return Response.json({ error: "Could not submit buzz." }, { status: 500 });
   }

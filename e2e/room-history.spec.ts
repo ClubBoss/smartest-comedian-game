@@ -26,15 +26,20 @@ test("host can create a new room without losing the previous room", async ({ pag
   expect(secondCode).toMatch(/^[A-Z0-9]{6}$/);
   expect(secondCode).not.toBe(firstCode);
 
+  // Reconcile room history through the same browser-persistence path used after a real host refresh.
+  // This avoids racing the 500 ms room-history observer against the second room creation.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: `Room ${secondCode}` })).toBeVisible();
+
   const roomsPanel = page.locator("details").filter({ hasText: /^Rooms/ });
-  if (!(await roomsPanel.getAttribute("open"))) {
+  if ((await roomsPanel.getAttribute("open")) === null) {
     await roomsPanel.locator("summary").click();
   }
   await expect(roomsPanel).toHaveAttribute("open", "");
+  await expect(roomsPanel.getByText(`Room ${firstCode}`, { exact: true })).toBeVisible();
 
   const firstRoomRow = roomsPanel.locator(".split-heading").filter({ hasText: `Room ${firstCode}` });
-  await expect(firstRoomRow.getByRole("button", { name: "Open" })).toBeVisible();
-  await firstRoomRow.getByRole("button", { name: "Open" }).click();
+  await firstRoomRow.getByRole("button", { name: "Open", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: `Room ${firstCode}` })).toBeVisible();
 });

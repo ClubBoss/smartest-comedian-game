@@ -42,6 +42,29 @@ export type PublicQuestionState = {
   explanation: string | null;
 };
 
+export type TournamentStage = "qualifier_a" | "qualifier_b" | "final" | "complete";
+
+export type TournamentMemberState = {
+  playerId: string;
+  stage: Exclude<TournamentStage, "complete">;
+  seedOrder: number;
+  qualified: boolean;
+  score: number;
+};
+
+export type TournamentPublicState = {
+  id: string;
+  format: "league_8_v1";
+  currentStage: TournamentStage;
+  status: "active" | "completed";
+  basePrize: number;
+  teamBonus: number;
+  currentPrize: number;
+  championPlayerId: string | null;
+  activePlayerIds: string[];
+  members: TournamentMemberState[];
+};
+
 export type LobbyState = {
   code: string;
   capacity: number;
@@ -52,6 +75,7 @@ export type LobbyState = {
   buzz: BuzzState | null;
   canUndoScore: boolean;
   question: PublicQuestionState | null;
+  tournament: TournamentPublicState | null;
 };
 
 export type PlayerIdentity = Omit<LobbyPlayer, "score" | "isReady"> & {

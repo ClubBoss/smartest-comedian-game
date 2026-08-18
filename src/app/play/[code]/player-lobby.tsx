@@ -189,6 +189,7 @@ export function PlayerLobby({ code }: { code: string }) {
 
   async function buzz() {
     if (!identity || !lobby?.buzz || lobby.buzz.status !== "open") return;
+    if (lobby.tournament && !lobby.tournament.activePlayerIds.includes(identity.playerId)) return;
     setBuzzing(true);
     setError(null);
     try {
@@ -202,6 +203,7 @@ export function PlayerLobby({ code }: { code: string }) {
       });
       const result = await response.json();
       if (!response.ok && response.status !== 409) throw new Error(result.error ?? "Could not submit buzz.");
+      if (!response.ok && result.error) setError(result.error);
       navigator.vibrate?.(response.ok ? [35, 25, 70] : 30);
       await refresh();
     } catch (caught) {
@@ -216,11 +218,33 @@ export function PlayerLobby({ code }: { code: string }) {
   }
 
   if (identity) {
-    const buzzOpen = lobby.buzz?.status === "open";
+    const tournament = lobby.tournament;
+    const currentStageMember = tournament && tournament.currentStage !== "complete"
+      ? tournament.members.find((member) => member.playerId === identity.playerId && member.stage === tournament.currentStage) ?? null
+      : null;
+    const qualifierMember = tournament?.members.find(
+      (member) => member.playerId === identity.playerId && (member.stage === "qualifier_a" || member.stage === "qualifier_b"),
+    ) ?? null;
+    const isTournamentActive = !tournament || Boolean(currentStageMember);
+    const buzzOpen = lobby.buzz?.status === "open" && isTournamentActive;
     const isWinner = lobby.buzz?.winnerId === identity.playerId;
     const currentPlayer = lobby.players.find((player) => player.id === identity.playerId);
-    const score = currentPlayer?.score ?? 0;
+    const score = currentStageMember?.score ?? qualifierMember?.score ?? currentPlayer?.score ?? 0;
     const isReady = currentPlayer?.isReady ?? false;
+
+    let tournamentStatus: string | null = null;
+    if (tournament && !isTournamentActive) {
+      if (tournament.currentStage === "qualifier_a" && tournament.members.some((member) => member.playerId === identity.playerId && member.stage === "qualifier_b")) {
+        tournamentStatus = "QUALIFIER B · YOU'RE UP NEXT";
+      } else if (tournament.currentStage === "qualifier_b" && qualifierMember?.qualified) {
+        tournamentStatus = "QUALIFIED · WAIT FOR FINAL FOUR";
+      } else if (tournament.currentStage === "final") {
+        tournamentStatus = "SPECTATING · FINAL FOUR";
+      } else {
+        tournamentStatus = "SPECTATING · CURRENT QUALIFIER";
+      }
+    }
+
     return (
       <main className="stack narrow player-controller">
         <div className="split-heading">
@@ -231,19 +255,36 @@ export function PlayerLobby({ code }: { code: string }) {
               {realtimeStatus === "realtime" ? "Connected" : realtimeStatus === "fallback" ? "Reconnecting" : "Connecting"}
             </span>
           </div>
-          <div className="player-score-badge"><span>Score</span><strong>{score}</strong></div>
+          <div className="player-score-badge"><span>{tournament ? "Stage score" : "Score"}</span><strong>{score}</strong></div>
         </div>
+
+        {tournament ? (
+          <section className={`tournament-player-banner ${isTournamentActive ? "active" : "spectator"}`} aria-live="polite">
+            <span>{tournament.currentStage === "qualifier_a" ? "QUALIFIER A" : tournament.currentStage === "qualifier_b" ? "QUALIFIER B" : tournament.currentStage === "final" ? "FINAL FOUR" : "TOURNAMENT COMPLETE"}</span>
+            <strong>{isTournamentActive ? "YOU ARE PLAYING" : tournamentStatus}</strong>
+          </section>
+        ) : null}
+
         <section className="card stack center">
           <button
             className={`buzzer-button ${buzzOpen ? "ready" : isWinner ? "winner" : ""}`}
-            disabled={!buzzOpen || buzzing}
+            disabled={!buzzOpen || buzzing || !isTournamentActive}
             onClick={() => void buzz()}
           >
-            {buzzOpen ? (buzzing ? "SENDING..." : "BUZZ") : isWinner ? "FIRST!" : lobby.buzz?.winnerName ? `${lobby.buzz.winnerName} BUZZED` : "WAIT"}
+            {!isTournamentActive
+              ? "WATCHING"
+              : buzzOpen
+                ? (buzzing ? "SENDING..." : "BUZZ")
+                : isWinner
+                  ? "FIRST!"
+                  : lobby.buzz?.winnerName
+                    ? `${lobby.buzz.winnerName} BUZZED`
+                    : "WAIT"}
           </button>
           {isWinner && lobby.buzz?.scoreResolved ? (
             <p className="score-result">Answer score: {lobby.buzz.scoreDelta! > 0 ? "+" : ""}{lobby.buzz.scoreDelta}</p>
           ) : null}
+          {!isTournamentActive ? <p className="muted compact">Your buzzer is locked server-side until your tournament stage becomes active.</p> : null}
           <p className="muted compact">Screen stays awake while this controller is open when your browser supports Wake Lock.</p>
         </section>
         <section className="card stack center">

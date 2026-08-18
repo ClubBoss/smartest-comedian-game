@@ -10,6 +10,13 @@ import { playHostReaction } from "@/lib/reaction-audio";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+function tournamentStageLabel(stage: "qualifier_a" | "qualifier_b" | "final" | "complete") {
+  if (stage === "qualifier_a") return "QUALIFIER A";
+  if (stage === "qualifier_b") return "QUALIFIER B";
+  if (stage === "final") return "FINAL FOUR";
+  return "TOURNAMENT COMPLETE";
+}
+
 export function DisplayLobby({ code }: { code: string }) {
   const { state: lobby } = useRoomState(code);
   const [soundArmed, setSoundArmed] = useState(false);
@@ -80,6 +87,19 @@ export function DisplayLobby({ code }: { code: string }) {
   const reaction = reactionKey ? HOST_REACTIONS.find((item) => item.key === reactionKey) ?? null : null;
   const livePriority = lobby.buzz?.status === "open" || Boolean(lobby.buzz?.winnerId);
   const setupPriority = !question;
+  const tournament = lobby.tournament;
+  const stageScoreByPlayer = new Map(
+    tournament && tournament.currentStage !== "complete"
+      ? tournament.members
+        .filter((member) => member.stage === tournament.currentStage)
+        .map((member) => [member.playerId, member.score] as const)
+      : [],
+  );
+  const displayPlayers = tournament && tournament.status === "active"
+    ? lobby.players
+      .filter((player) => tournament.activePlayerIds.includes(player.id))
+      .map((player) => ({ ...player, score: stageScoreByPlayer.get(player.id) ?? 0 }))
+    : lobby.players;
 
   return (
     <main
@@ -88,9 +108,10 @@ export function DisplayLobby({ code }: { code: string }) {
     >
       <header className="display-header" style={{ order: setupPriority ? 0 : 4 }}>
         <div>
-          <p className="eyebrow">Room</p>
+          <p className="eyebrow">{tournament ? tournamentStageLabel(tournament.currentStage) : "Room"}</p>
           <div className="display-code">{lobby.code}</div>
-          <p>{lobby.playerCount} / {lobby.capacity} players</p>
+          <p>{tournament ? `${displayPlayers.length} playing · ${lobby.playerCount} joined` : `${lobby.playerCount} / ${lobby.capacity} players`}</p>
+          {tournament ? <p className="display-tournament-prize">Prize: <strong>{tournament.currentPrize} AZN</strong></p> : null}
           <span className={`status-pill ${realtimeStatus === "realtime" ? "live" : ""}`}>
             {realtimeStatus === "realtime" ? "Display connected" : "Display reconnecting"}
           </span>
@@ -181,7 +202,7 @@ export function DisplayLobby({ code }: { code: string }) {
       ) : null}
 
       <section className="display-players" aria-label="Scoreboard" style={{ order: livePriority ? 2 : setupPriority ? 2 : 1 }}>
-        {lobby.players.map((player) => (
+        {displayPlayers.map((player) => (
           <article className={lobby.buzz?.winnerId === player.id ? "display-player active-winner" : "display-player"} key={player.id}>
             <span className="seat">{player.seatOrder}</span>
             <strong className="display-player-name">{player.displayName}</strong>
