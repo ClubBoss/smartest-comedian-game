@@ -1,15 +1,5 @@
-import { randomInt } from "node:crypto";
 import { requireHostForRoom } from "@/lib/room-auth";
 import { broadcastRoomRefresh } from "@/lib/room-events";
-
-function shuffled<T>(values: T[]): T[] {
-  const result = [...values];
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swap = randomInt(index + 1);
-    [result[index], result[swap]] = [result[swap], result[index]];
-  }
-  return result;
-}
 
 export async function GET(
   request: Request,
@@ -21,7 +11,7 @@ export async function GET(
 
   const [{ data: packs, error: packsError }, { data: items, error: itemsError }] = await Promise.all([
     auth.supabase.from("question_packs").select("id, name, description").order("updated_at", { ascending: false }),
-    auth.supabase.from("question_pack_items").select("pack_id, question_id, position").order("position"),
+    auth.supabase.from("question_pack_items").select("pack_id, question_id, position, question_role").order("position"),
   ]);
   if (packsError || itemsError) {
     console.error("Host question packs load failed", packsError ?? itemsError);
@@ -29,10 +19,14 @@ export async function GET(
   }
 
   return Response.json({
-    packs: (packs ?? []).map((pack) => ({
-      ...pack,
-      count: (items ?? []).filter((item) => item.pack_id === pack.id).length,
-    })),
+    packs: (packs ?? []).map((pack) => {
+      const packItems = (items ?? []).filter((item) => item.pack_id === pack.id);
+      return {
+        ...pack,
+        count: packItems.length,
+        hasSpecialQuestions: packItems.some((item) => item.question_role !== "regular"),
+      };
+    }),
   });
 }
 
@@ -44,7 +38,7 @@ export async function POST(
   const auth = await requireHostForRoom(request, rawCode);
   if ("error" in auth) return Response.json({ error: auth.error }, { status: auth.status });
 
-  let body: { packId?: unknown; randomize?: unknown };
+  let body: { packId?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -63,29 +57,17 @@ export async function POST(
   }
   if (!pack) return Response.json({ error: "Pack not found." }, { status: 404 });
 
-  const { data: items, error: itemsError } = await auth.supabase
-    .from("question_pack_items")
-    .select("question_id, position")
-    .eq("pack_id", pack.id)
-    .order("position");
-  if (itemsError) {
-    console.error("Pack items lookup failed", itemsError);
-    return Response.json({ error: "Could not load question pack items." }, { status: 500 });
-  }
-  let questionIds = (items ?? []).map((item) => item.question_id);
-  if (body.randomize === true) questionIds = shuffled(questionIds);
-
-  const { data, error } = await auth.supabase.rpc("queue_questions_atomic", {
+  const { data, error } = await auth.supabase.rpc("queue_question_pack_with_roles_atomic", {
     p_room_id: auth.room.id,
-    p_question_ids: questionIds,
+    p_pack_id: pack.id,
   });
   if (error) {
     const known = error.message.match(/ERR_[A-Z_]+/)?.[0];
     if (known) return Response.json({ error: known }, { status: 409 });
     console.error("Queue question pack failed", error);
-    return Response.json({ error: "Could not queue question pack." }, { status: 500 });
+    return Response.json({ error: "Could not load question pack." }, { status: 500 });
   }
 
   await broadcastRoomRefresh(auth.room.code);
-  return Response.json({ ok: true, count: data ?? questionIds.length, randomized: body.randomize === true });
+  return Response.json({ ok: true, count: Number(data ?? 0), packName: pack.name });
 }
