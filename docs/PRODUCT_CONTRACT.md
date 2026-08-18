@@ -56,7 +56,7 @@ A home group needs a low-friction tool to run a comedy quiz game with 2-10 playe
 - Maximum supported: 10.
 - Host chooses room capacity between 2 and 10.
 - Layouts adapt automatically.
-- No logic may assume exactly 8 players.
+- General game logic must not assume exactly 8 players. The explicitly selected `league_8_v1` preset is allowed to require exactly 8 participants by definition.
 
 ## 5. Question model
 
@@ -145,20 +145,38 @@ Client timestamps never decide the winner. Host can manually override the winner
 - Hints and answer are independently revealed by the host.
 - Host notes, acceptable variants and canonical answer remain host-only until explicitly revealed where applicable.
 
-## 11. Non-goals for V1
+## 11. Tournament Night preset
+
+V1 admits one opinionated tournament orchestration preset: `league_8_v1`.
+
+- Exactly 8 joined players are split into Qualifier A and Qualifier B, four players each.
+- Exactly the top 2 resolved players from each qualifier advance to a four-player Final.
+- Different qualifier question sets are never compared as one global top-four table.
+- Qualifier and Final score history remains append-only, but tournament standings are stage-scoped so the Final starts from 0 without deleting qualifier events.
+- Cutoff ties require an explicit host-resolved tiebreak; the system must not silently choose a finalist by hidden secondary ordering.
+- Tournament question-pack items may define roles such as regular, qualifier super, team, last, double-or-nothing and tiebreak without changing the reusable source question.
+- A final Team Question may increase the champion prize from 10 AZN to 12 AZN without changing individual standings.
+- The champion may keep the earned prize or voluntarily attempt one three-option Double or Nothing question. Correct doubles the prize; wrong reduces the payout to 0.
+- All eight players remain in one room; future tournament UX activates only the relevant qualifier/final participants while others remain spectators.
+- Shared display labels for tournament roles must remain neutral and must not expose spoiler titles or host-only answer information.
+- Existing host recovery and manual scoring remain authoritative throughout tournament play.
+
+Detailed sequencing and rollout authority lives in `docs/TOURNAMENT_NIGHT_V1.md`.
+
+## 12. Non-goals for V1
 
 - Native iOS/Android apps.
 - Public social network/accounts.
 - AI-generated questions.
 - Automated judging of free-form answers.
-- Tournament brackets.
-- Complex monetization.
+- Generic/custom tournament bracket builders beyond the single `league_8_v1` preset.
+- Complex monetization or configurable prize economies.
 - Video/audio chat.
 - Exact esports-grade latency measurement.
 - Video questions; V1 media scope is still images.
-- Full round/tournament rules engine.
+- Full generic round/tournament rules engine.
 - Customizable/full host soundboard or jingle engine beyond the fixed reaction palette.
 
-## 12. V1 acceptance scenario
+## 13. V1 acceptance scenario
 
-A host creates a room for 8 players, shares QR, eight people join with distinct buzzer sounds, and the host prepares an ordered queue. A saved text/photo question is preloaded privately and then revealed. The host opens buzzers. Two or more players press nearly simultaneously; exactly one wins and everyone else locks for that cycle. The display identifies the winner and plays that player's sound. Host resolves the answer as `-1`; then opens a fresh cycle and the same player is eligible again together with everyone else. Another answer receives `0`; the game continues. A later answer receives `+1`, all scores update, then the host reveals the canonical answer and advances. The host may trigger a fixed comedy reaction on the shared display without changing any score or game state. A special question can use a manual score delta. The same flow works with 2 and 10 players.
+A host creates a room for 8 players, shares QR, eight people join with distinct buzzer sounds, and the host prepares an ordered queue. A saved text/photo question is preloaded privately and then revealed. The host opens buzzers. Two or more players press nearly simultaneously; exactly one wins and everyone else locks for that cycle. The display identifies the winner and plays that player's sound. Host resolves the answer as `-1`; then opens a fresh cycle and the same player is eligible again together with everyone else. Another answer receives `0`; the game continues. A later answer receives `+1`, all scores update, then the host reveals the canonical answer and advances. The host may trigger a fixed comedy reaction on the shared display without changing any score or game state. A special question can use a manual score delta. The same core room flow works with 2 and 10 players; when the host explicitly selects `league_8_v1`, the tournament layer requires exactly 8 joined players and stage-scopes qualifier/final standings without replacing the core realtime game engine.
