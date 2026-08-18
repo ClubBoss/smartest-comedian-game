@@ -1,6 +1,6 @@
 begin;
 
-select plan(14);
+select plan(15);
 
 select has_table('public', 'tournament_nights', 'tournament nights table exists');
 select has_table('public', 'tournament_stage_members', 'tournament stage membership table exists');
