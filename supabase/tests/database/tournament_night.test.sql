@@ -60,10 +60,10 @@ select is(
   complete_league_qualifier_atomic(
     (select tournament_id from tournament_context),
     'qualifier_a',
-    array(
+    array[
       (select id from players where display_name = 'A1' and room_id = (select id from rooms where code = 'LEAGUE8')),
       (select id from players where display_name = 'A2' and room_id = (select id from rooms where code = 'LEAGUE8'))
-    )
+    ]
   ),
   'qualifier_b',
   'completing qualifier A advances to qualifier B'
@@ -99,10 +99,10 @@ select is(
   complete_league_qualifier_atomic(
     (select tournament_id from tournament_context),
     'qualifier_b',
-    array(
+    array[
       (select id from players where display_name = 'B1' and room_id = (select id from rooms where code = 'LEAGUE8')),
       (select id from players where display_name = 'B2' and room_id = (select id from rooms where code = 'LEAGUE8'))
-    )
+    ]
   ),
   'final',
   'completing qualifier B advances to the final'
