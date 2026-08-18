@@ -86,6 +86,7 @@ export async function GET(
       .filter((value): value is string => Boolean(value)),
   );
 
+  const activeTournamentScoreByPlayer = new Map<string, number>();
   let tournamentState = null;
   if (tournament) {
     const { data: stageScores, error: stageScoresError } = await supabase
@@ -113,6 +114,14 @@ export async function GET(
         .filter((member) => member.stage === tournament.current_stage)
         .sort((left, right) => left.seedOrder - right.seedOrder)
         .map((member) => member.playerId);
+
+    if (tournament.current_stage !== "complete") {
+      for (const member of members) {
+        if (member.stage === tournament.current_stage) {
+          activeTournamentScoreByPlayer.set(member.playerId, member.score);
+        }
+      }
+    }
 
     tournamentState = {
       id: tournament.id,
@@ -233,7 +242,7 @@ export async function GET(
       soundType: player.sound_type,
       soundKey: player.sound_key,
       seatOrder: player.seat_order,
-      score: scoreByPlayer.get(player.id) ?? 0,
+      score: activeTournamentScoreByPlayer.get(player.id) ?? scoreByPlayer.get(player.id) ?? 0,
       isReady: player.is_ready,
     })),
     availableSoundKeys: BUILTIN_SOUNDS.map((sound) => sound.key).filter((key) => !usedSoundKeys.has(key)),
