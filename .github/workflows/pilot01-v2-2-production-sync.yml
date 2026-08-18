@@ -1,0 +1,203 @@
+name: Pilot 01 V2.2 Guarded Production Sync
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pilot01-v2-2-production-sync.yml"
+      - "ops/PILOT_01_V2_2_TARGET.json"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LIVE_URL: https://smartest-comedian-game.blufferus.workers.dev
+      QUESTION_BANK_ADMIN_KEY: ${{ secrets.QUESTION_BANK_ADMIN_KEY }}
+    steps:
+      - name: Checkout exact ops head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Validate V2.2 target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${QUESTION_BANK_ADMIN_KEY:-}" || { echo "QUESTION_BANK_ADMIN_KEY unavailable" >&2; exit 1; }
+          node <<'NODE'
+          const fs = require('node:fs');
+          const target = JSON.parse(fs.readFileSync('ops/PILOT_01_V2_2_TARGET.json', 'utf8'));
+          const qs = target.questions ?? [];
+          if (target.revision !== 'difficulty_v2_2') throw new Error('Unexpected revision');
+          if (qs.length !== 20) throw new Error(`Expected 20 questions, got ${qs.length}`);
+          if (new Set(qs.map(q => q.questionId)).size !== 20) throw new Error('Duplicate questionId');
+          if (new Set(qs.map(q => q.contentKey)).size !== 20) throw new Error('Duplicate contentKey');
+          const expectedCounts = { 'Qualifier A': 6, 'Qualifier B': 6, Final: 8 };
+          for (const [pack, count] of Object.entries(expectedCounts)) {
+            if (qs.filter(q => q.pack === pack).length !== count) throw new Error(`${pack}: wrong count`);
+          }
+          for (const q of qs) {
+            if (!q.questionId || !q.contentKey || !q.prompt?.trim() || !q.answer?.trim()) throw new Error(`${q.contentKey}: required field missing`);
+            if (q.status !== 'ready') throw new Error(`${q.contentKey}: must be ready`);
+            if (!Array.isArray(q.hints) || q.hints.length !== 3 || q.hints.some(v => !String(v).trim())) throw new Error(`${q.contentKey}: exactly 3 hints required`);
+            if (!Array.isArray(q.answerVariants) || q.answerVariants.length < 2) throw new Error(`${q.contentKey}: answer variants required`);
+            if (!Array.isArray(q.tags) || !q.tags.includes('pilot01') || !q.tags.includes(`content:${q.contentKey}`) || !q.tags.includes(`role:${q.role}`)) throw new Error(`${q.contentKey}: canonical tags missing`);
+            if (q.tags.some(tag => String(tag).toLowerCase().includes('double_or_nothing'))) throw new Error(`${q.contentKey}: forbidden tag`);
+          }
+          console.log('V2.2 target validated: 20 questions, packs 6/6/8.');
+          NODE
+
+      - name: Guarded in-place update and strict production verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const target = JSON.parse(fs.readFileSync('ops/PILOT_01_V2_2_TARGET.json', 'utf8'));
+          const base = process.env.LIVE_URL;
+          const key = process.env.QUESTION_BANK_ADMIN_KEY;
+          const expectedSha = target.expectedProductionBuildSha;
+          const packNames = ['Qualifier A', 'Qualifier B', 'Final'];
+          const targetById = new Map(target.questions.map(q => [q.questionId, q]));
+
+          async function request(path, options = {}, admin = true) {
+            const headers = { ...(options.headers ?? {}) };
+            if (admin) headers['x-question-bank-key'] = key;
+            const response = await fetch(`${base}${path}`, { ...options, headers, redirect: 'follow' });
+            const text = await response.text();
+            let body;
+            try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text.slice(0, 500) }; }
+            if (!response.ok) throw new Error(`${options.method ?? 'GET'} ${path} HTTP ${response.status}: ${JSON.stringify(body)}`);
+            return body;
+          }
+
+          function normalizeTags(tags) { return [...(tags ?? [])].map(String).sort(); }
+          function assertEq(actual, expected, label) {
+            if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${label} mismatch\nexpected=${JSON.stringify(expected)}\nactual=${JSON.stringify(actual)}`);
+          }
+          function contentKeyOf(q) {
+            const tag = (q.tags ?? []).find(t => String(t).startsWith('content:'));
+            return tag ? String(tag).slice(8) : null;
+          }
+
+          const healthBefore = await request('/api/health', {}, false);
+          if (healthBefore.ok !== true || healthBefore.database !== 'ok') throw new Error(`Production health failed: ${JSON.stringify(healthBefore)}`);
+          if (healthBefore.buildSha !== expectedSha) throw new Error(`Production SHA mismatch: expected ${expectedSha}, got ${healthBefore.buildSha}`);
+
+          const questionsBefore = await request('/api/questions');
+          const packsBefore = await request('/api/question-packs');
+          const allBefore = questionsBefore.questions ?? [];
+          const byIdBefore = new Map(allBefore.map(q => [q.id, q]));
+          const nonPilotIdsBefore = new Set(allBefore.filter(q => !(q.tags ?? []).includes('pilot01')).map(q => q.id));
+          if (allBefore.length < 20) throw new Error(`Unexpectedly small Question Bank: ${allBefore.length}`);
+
+          const canonicalPacks = (packsBefore.packs ?? []).filter(p => packNames.includes(p.name));
+          if (canonicalPacks.length !== 3) throw new Error(`Expected exactly 3 canonical packs, got ${canonicalPacks.length}`);
+          for (const name of packNames) {
+            const pack = canonicalPacks.find(p => p.name === name);
+            if (!pack) throw new Error(`Missing pack ${name}`);
+            const expectedIds = target.questions.filter(q => q.pack === name).map(q => q.questionId);
+            assertEq(pack.questionIds ?? [], expectedIds, `${name} questionIds before update`);
+          }
+          for (const q of target.questions) {
+            if (!byIdBefore.has(q.questionId)) throw new Error(`Target UUID missing from production: ${q.questionId} (${q.contentKey})`);
+          }
+
+          console.log(`Preflight OK: build=${healthBefore.buildSha}, total=${allBefore.length}, nonPilot=${nonPilotIdsBefore.size}`);
+
+          for (const q of target.questions) {
+            const current = byIdBefore.get(q.questionId);
+            const assets = (current.assets ?? []).map(asset => ({
+              kind: 'existing',
+              storagePath: asset.storagePath,
+              mimeType: asset.mimeType,
+              altText: asset.altText ?? '',
+              caption: asset.caption ?? '',
+              width: asset.width ?? null,
+              height: asset.height ?? null,
+            }));
+            const payload = {
+              id: q.questionId,
+              prompt: q.prompt,
+              answer: q.answer,
+              answerVariants: q.answerVariants,
+              explanation: q.explanation,
+              hostNotes: q.hostNotes,
+              category: q.category,
+              difficulty: q.difficulty,
+              sourceLabel: q.sourceLabel,
+              sourceUrl: q.sourceUrl,
+              status: q.status,
+              hints: q.hints,
+              tags: q.tags,
+              assets,
+            };
+            const form = new FormData();
+            form.set('payload', JSON.stringify(payload));
+            const saved = await request('/api/questions', { method: 'POST', body: form });
+            if (saved.id !== q.questionId) throw new Error(`${q.contentKey}: save returned wrong id ${saved.id}`);
+            console.log(`updated ${q.pack} / ${q.contentKey} / ${q.questionId}`);
+          }
+
+          const healthAfter = await request('/api/health', {}, false);
+          if (healthAfter.ok !== true || healthAfter.database !== 'ok' || healthAfter.buildSha !== expectedSha) throw new Error(`Post-update health/SHA mismatch: ${JSON.stringify(healthAfter)}`);
+          const questionsAfter = await request('/api/questions');
+          const packsAfter = await request('/api/question-packs');
+          const allAfter = questionsAfter.questions ?? [];
+          const byIdAfter = new Map(allAfter.map(q => [q.id, q]));
+          if (allAfter.length !== allBefore.length) throw new Error(`Question count changed: before ${allBefore.length}, after ${allAfter.length}`);
+          for (const id of nonPilotIdsBefore) if (!byIdAfter.has(id)) throw new Error(`Non-pilot question disappeared: ${id}`);
+
+          for (const q of target.questions) {
+            const actual = byIdAfter.get(q.questionId);
+            if (!actual) throw new Error(`${q.contentKey}: missing after update`);
+            assertEq(actual.prompt, q.prompt, `${q.contentKey}.prompt`);
+            assertEq(actual.answer, q.answer, `${q.contentKey}.answer`);
+            assertEq(actual.answerVariants ?? [], q.answerVariants, `${q.contentKey}.answerVariants`);
+            assertEq(actual.hints ?? [], q.hints, `${q.contentKey}.hints`);
+            assertEq(actual.explanation ?? null, q.explanation ?? null, `${q.contentKey}.explanation`);
+            assertEq(actual.hostNotes ?? null, q.hostNotes ?? null, `${q.contentKey}.hostNotes`);
+            assertEq(actual.category ?? null, q.category ?? null, `${q.contentKey}.category`);
+            assertEq(actual.difficulty ?? null, q.difficulty ?? null, `${q.contentKey}.difficulty`);
+            assertEq(actual.sourceLabel ?? null, q.sourceLabel ?? null, `${q.contentKey}.sourceLabel`);
+            assertEq(actual.sourceUrl ?? null, q.sourceUrl ?? null, `${q.contentKey}.sourceUrl`);
+            assertEq(actual.status, 'ready', `${q.contentKey}.status`);
+            assertEq(normalizeTags(actual.tags), normalizeTags(q.tags), `${q.contentKey}.tags`);
+            if (contentKeyOf(actual) !== q.contentKey) throw new Error(`${q.contentKey}: content tag mismatch`);
+          }
+
+          const canonicalAfter = (packsAfter.packs ?? []).filter(p => packNames.includes(p.name));
+          if (canonicalAfter.length !== 3) throw new Error(`Post-update canonical pack count ${canonicalAfter.length}`);
+          const packSummary = [];
+          for (const name of packNames) {
+            const pack = canonicalAfter.find(p => p.name === name);
+            const expectedIds = target.questions.filter(q => q.pack === name).map(q => q.questionId);
+            assertEq(pack.questionIds ?? [], expectedIds, `${name} questionIds after update`);
+            packSummary.push({ name, count: expectedIds.length, ids: expectedIds, contentKeys: expectedIds.map(id => targetById.get(id).contentKey) });
+          }
+
+          const pilotAfter = allAfter.filter(q => (q.tags ?? []).includes('pilot01'));
+          if (pilotAfter.length !== 20) throw new Error(`Expected 20 pilot01 questions after update, got ${pilotAfter.length}`);
+          if (pilotAfter.some(q => q.status !== 'ready')) throw new Error('Not all pilot01 questions are Ready');
+          const forbidden = pilotAfter.filter(q => (q.tags ?? []).some(tag => String(tag).toLowerCase().includes('double_or_nothing')));
+          if (forbidden.length) throw new Error(`Forbidden Double-or-Nothing tags on ${forbidden.length} questions`);
+
+          console.log('PILOT_01_V2_2_SYNC_VERIFIED_JSON_START');
+          console.log(JSON.stringify({
+            revision: target.revision,
+            productionBuildSha: healthAfter.buildSha,
+            database: healthAfter.database,
+            totalQuestionCount: allAfter.length,
+            preservedNonPilotCount: nonPilotIdsBefore.size,
+            pilotQuestionCount: pilotAfter.length,
+            pilotReadyCount: pilotAfter.filter(q => q.status === 'ready').length,
+            canonicalPackCount: canonicalAfter.length,
+            packs: packSummary,
+            forbiddenDoubleOrNothingCount: forbidden.length,
+          }, null, 2));
+          console.log('PILOT_01_V2_2_SYNC_VERIFIED_JSON_END');
+          NODE
