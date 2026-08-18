@@ -12,14 +12,14 @@ type Props = {
 };
 
 function stageLabel(stage: TournamentStage) {
-  if (stage === "qualifier_a") return "Qualifier A";
-  if (stage === "qualifier_b") return "Qualifier B";
-  if (stage === "final") return "Final Four";
-  return "Complete";
+  if (stage === "qualifier_a") return "Игра 1";
+  if (stage === "qualifier_b") return "Игра 2";
+  if (stage === "final") return "Финал";
+  return "Игра завершена";
 }
 
 function playerName(lobby: LobbyState, playerId: string) {
-  return lobby.players.find((player) => player.id === playerId)?.displayName ?? "Unknown player";
+  return lobby.players.find((player) => player.id === playerId)?.displayName ?? "Игрок";
 }
 
 function sortMembers(members: TournamentMemberState[]) {
@@ -29,9 +29,11 @@ function sortMembers(members: TournamentMemberState[]) {
 export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props) {
   const [groupAIds, setGroupAIds] = useState<string[] | null>(null);
   const [selectedAdvancers, setSelectedAdvancers] = useState<string[]>([]);
+  const [selectedChampionId, setSelectedChampionId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [advanceArmed, setAdvanceArmed] = useState(false);
+  const [championArmed, setChampionArmed] = useState(false);
 
   const allPlayerIds = useMemo(() => lobby.players.map((player) => player.id), [lobby.players]);
   const defaultGroupAIds = allPlayerIds.slice(0, 4);
@@ -51,11 +53,12 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
         body: JSON.stringify(body),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Tournament action failed.");
+      if (!response.ok) throw new Error(result.error ?? "Не удалось выполнить действие.");
       await onRefresh();
+      window.dispatchEvent(new Event("smartest-live-question-refresh"));
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Tournament action failed.");
+      setError(caught instanceof Error ? caught.message : "Не удалось выполнить действие.");
       return false;
     } finally {
       setBusy(false);
@@ -97,22 +100,22 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
   if (!tournament) {
     if (gameMode) return null;
     return (
-      <section className="card stack" aria-label="Tournament Night setup">
+      <section className="card stack" aria-label="Game Night setup">
         <div className="split-heading">
           <div>
-            <p className="eyebrow">Tournament Night</p>
-            <h2>League 8</h2>
-            <p className="muted compact">Two groups of four. Top 2 from each group advance to a fresh-score Final Four.</p>
+            <p className="eyebrow">Вечер игры</p>
+            <h2>8 игроков · 3 отдельные игры</h2>
+            <p className="muted compact">Четверо играют Игру 1, другие четверо — Игру 2. По два лучших выходят в отдельный Финал с нулевым счётом.</p>
           </div>
-          <span className="status-pill">8 PLAYERS</span>
+          <span className="status-pill">8 ИГРОКОВ</span>
         </div>
 
         {lobby.playerCount !== 8 ? (
-          <p className="muted">Join exactly 8 active players to enable this preset. Current: {lobby.playerCount}/8.</p>
+          <p className="muted">Для этого сценария нужно 8 активных игроков. Сейчас: {lobby.playerCount}/8.</p>
         ) : (
           <>
             <div className="host-actions">
-              <button className="secondary" disabled={busy} onClick={shuffleGroups}>Shuffle 4 + 4</button>
+              <button className="secondary" disabled={busy} onClick={shuffleGroups}>Перемешать 4 + 4</button>
             </div>
             <div className="tournament-group-picker">
               {lobby.players.map((player) => {
@@ -121,23 +124,25 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
                   <label className={`tournament-player-pick ${inA ? "group-a" : "group-b"}`} key={player.id}>
                     <input
                       type="checkbox"
+                      aria-label={`Игра 1 · ${player.displayName}`}
                       checked={inA}
                       onChange={() => toggleGroupA(player.id)}
                       disabled={!inA && effectiveGroupAIds.length >= 4}
                     />
                     <strong>{player.displayName}</strong>
-                    <span>{inA ? "A" : "B"}</span>
+                    <span>{inA ? "Игра 1" : "Игра 2"}</span>
                   </label>
                 );
               })}
             </div>
             <div className="lobby-grid">
-              <div className="card compact-card"><p className="eyebrow">Group A</p><strong>{effectiveGroupAIds.map((id) => playerName(lobby, id)).join(" · ") || "Choose 4 players"}</strong></div>
-              <div className="card compact-card"><p className="eyebrow">Group B</p><strong>{groupBIds.map((id) => playerName(lobby, id)).join(" · ")}</strong></div>
+              <div className="card compact-card"><p className="eyebrow">Игра 1</p><strong>{effectiveGroupAIds.map((id) => playerName(lobby, id)).join(" · ") || "Выбери 4 игроков"}</strong></div>
+              <div className="card compact-card"><p className="eyebrow">Игра 2</p><strong>{groupBIds.map((id) => playerName(lobby, id)).join(" · ")}</strong></div>
             </div>
             <button className="primary" disabled={busy || effectiveGroupAIds.length !== 4 || groupBIds.length !== 4} onClick={() => void startTournament()}>
-              {busy ? "Starting..." : "Start Tournament Night"}
+              {busy ? "Запускаю..." : "Начать Игру 1"}
             </button>
+            <p className="tiny muted">После старта загрузи отдельный пакет «Игра 1» в блоке вопросов. Перед Игрой 2 и Финалом загружаются их собственные пакеты.</p>
           </>
         )}
         {error ? <p className="error">{error}</p> : null}
@@ -145,11 +150,10 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
     );
   }
 
-  const activeTournament = tournament;
-  const currentStage = activeTournament.currentStage;
+  const currentStage = tournament.currentStage;
   const activeMembers = currentStage === "complete"
     ? []
-    : sortMembers(activeTournament.members.filter((member) => member.stage === currentStage));
+    : sortMembers(tournament.members.filter((member) => member.stage === currentStage));
   const qualifierResolution = currentStage === "qualifier_a" || currentStage === "qualifier_b"
     ? activeMembers.length === 4
       ? resolveTopTwo(activeMembers.map((member) => ({
@@ -181,7 +185,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
       return;
     }
     const ok = await postTournament("advance", {
-      tournamentId: activeTournament.id,
+      tournamentId: tournament.id,
       stage: currentStage,
       advancingPlayerIds: selectedAdvancers,
     });
@@ -191,15 +195,50 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
     }
   }
 
+  async function lockChampion() {
+    if (currentStage !== "final" || !selectedChampionId || transitionBlocked) return;
+    if (!championArmed) {
+      setChampionArmed(true);
+      return;
+    }
+    const ok = await postTournament("final", { action: "complete", championPlayerId: selectedChampionId });
+    if (ok) setChampionArmed(false);
+  }
+
+  if (currentStage === "complete") {
+    const championName = tournament.championPlayerId ? playerName(lobby, tournament.championPlayerId) : "Победитель";
+    return (
+      <section className="card stack tournament-live-panel" aria-label="Game Night result">
+        <div className="split-heading">
+          <div><p className="eyebrow">Игра завершена</p><h2>{championName}</h2><p className="muted compact">Победитель Финала.</p></div>
+          <div className="tournament-prize-badge"><span>Приз</span><strong>{tournament.finalPayout ?? tournament.currentPrize} AZN</strong></div>
+        </div>
+        {!tournament.doubleResolved ? (
+          <div className="stack tournament-advance-box">
+            <strong>Последний выбор</strong>
+            <p className="muted compact">Победитель может забрать {tournament.currentPrize} AZN сейчас или сыграть заранее подготовленный вопрос «Удвоение приза».</p>
+            <div className="host-actions">
+              <button className="primary" disabled={busy} onClick={() => void postTournament("final", { action: "take" })}>Забрать {tournament.currentPrize} AZN</button>
+              <span className="status-pill">ИЛИ ЗАГРУЗИ ВОПРОС «УДВОЕНИЕ»</span>
+            </div>
+          </div>
+        ) : (
+          <p className="notice">Финальный денежный результат зафиксирован: {tournament.finalPayout ?? 0} AZN.</p>
+        )}
+        {error ? <p className="error">{error}</p> : null}
+      </section>
+    );
+  }
+
   return (
-    <section className="card stack tournament-live-panel" aria-label="Tournament Night controller">
+    <section className="card stack tournament-live-panel" aria-label="Game Night controller">
       <div className="split-heading">
         <div>
-          <p className="eyebrow">Tournament Night</p>
+          <p className="eyebrow">Вечер игры</p>
           <h2>{stageLabel(currentStage)}</h2>
-          <p className="muted compact">Active players: {activeMembers.map((member) => playerName(lobby, member.playerId)).join(" · ") || "None"}</p>
+          <p className="muted compact">Сейчас играют: {activeMembers.map((member) => playerName(lobby, member.playerId)).join(" · ") || "—"}</p>
         </div>
-        <div className="tournament-prize-badge"><span>Final prize</span><strong>{activeTournament.currentPrize} AZN</strong></div>
+        {currentStage === "final" ? <div className="tournament-prize-badge"><span>Приз финала</span><strong>{tournament.currentPrize} AZN</strong></div> : null}
       </div>
 
       {activeMembers.length > 0 ? (
@@ -212,10 +251,18 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
                   checked={selectedAdvancers.includes(member.playerId)}
                   onChange={() => toggleAdvancer(member.playerId)}
                 />
-              ) : <span className="seat">{index + 1}</span>}
+              ) : (
+                <input
+                  type="radio"
+                  name="final-champion"
+                  checked={selectedChampionId === member.playerId}
+                  onChange={() => { setSelectedChampionId(member.playerId); setChampionArmed(false); }}
+                />
+              )}
+              <span className="seat">{index + 1}</span>
               <strong>{playerName(lobby, member.playerId)}</strong>
               <strong className="host-score">{member.score}</strong>
-              {member.qualified ? <span className="status-pill live">QUALIFIED</span> : null}
+              {member.qualified ? <span className="status-pill live">ПРОШЁЛ</span> : null}
             </label>
           ))}
         </div>
@@ -224,34 +271,45 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
       {(currentStage === "qualifier_a" || currentStage === "qualifier_b") && qualifierResolution ? (
         <div className="stack tournament-advance-box">
           {hasCutoffTie ? (
-            <p className="warning"><strong>Tiebreak required.</strong> The score cutoff is tied. Run the tiebreak, then select exactly two advancing players here.</p>
+            <p className="warning"><strong>Нужен тай-брейк.</strong> На проходном месте ничья. Проведи резервный вопрос, затем выбери двух прошедших.</p>
           ) : (
             <div className="host-actions">
-              <p className="muted compact">Current clear top 2: {clearSuggestedIds.map((id) => playerName(lobby, id)).join(" · ")}</p>
-              <button className="secondary" onClick={() => { setSelectedAdvancers(clearSuggestedIds); setAdvanceArmed(false); }}>Select current top 2</button>
+              <p className="muted compact">Сейчас проходят: {clearSuggestedIds.map((id) => playerName(lobby, id)).join(" · ")}</p>
+              <button className="secondary" onClick={() => { setSelectedAdvancers(clearSuggestedIds); setAdvanceArmed(false); }}>Выбрать этих двоих</button>
             </div>
           )}
-          {transitionBlocked ? <p className="warning">Finish the current question and any open buzzer cycle before changing tournament stage.</p> : null}
+          {transitionBlocked ? <p className="warning">Сначала закончи текущий вопрос и закрой buzzer.</p> : null}
           <button
             className={advanceArmed ? "danger" : "primary"}
             disabled={busy || selectedAdvancers.length !== 2 || transitionBlocked}
             onClick={() => void advanceQualifier()}
           >
             {busy
-              ? "Saving..."
+              ? "Сохраняю..."
               : advanceArmed
-                ? `CONFIRM ${selectedAdvancers.map((id) => playerName(lobby, id)).join(" + ")}`
+                ? `ПОДТВЕРДИТЬ: ${selectedAdvancers.map((id) => playerName(lobby, id)).join(" + ")}`
                 : currentStage === "qualifier_a"
-                  ? "Review top 2 → Qualifier B"
-                  : "Review top 2 → Final Four"}
+                  ? "Завершить Игру 1 → Игру 2"
+                  : "Завершить Игру 2 → Финал"}
           </button>
-          {advanceArmed ? <p className="tiny muted">Second click changes the active tournament stage. This is intentionally guarded.</p> : null}
+          <p className="tiny muted">После перехода счёт новой игры начинается с 0. Затем просто загрузи её отдельный пакет вопросов.</p>
         </div>
       ) : null}
 
       {currentStage === "final" ? (
-        <p className="muted compact">Final standings use only Final-stage score events; qualifier points remain in history but do not carry over.</p>
+        <div className="stack tournament-advance-box">
+          <p className="muted compact">Финал имеет отдельный счёт с нуля. Командный вопрос может поднять приз до 12 AZN.</p>
+          {transitionBlocked ? <p className="warning">Победителя можно зафиксировать только после завершения последнего вопроса.</p> : null}
+          <button
+            className={championArmed ? "danger" : "primary"}
+            disabled={busy || !selectedChampionId || transitionBlocked}
+            onClick={() => void lockChampion()}
+          >
+            {busy ? "Сохраняю..." : championArmed ? `ПОДТВЕРДИТЬ ПОБЕДИТЕЛЯ: ${playerName(lobby, selectedChampionId)}` : "Зафиксировать победителя Финала"}
+          </button>
+        </div>
       ) : null}
+
       {error ? <p className="error">{error}</p> : null}
     </section>
   );
