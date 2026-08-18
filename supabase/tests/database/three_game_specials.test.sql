@@ -32,7 +32,7 @@ select is(
 select is(
   (select count(*) from question_pack_items where pack_id = '90000000-0000-4000-8000-000000000003'::uuid),
   9::bigint,
-  'Final pack contains regular, team, last, tiebreak and superfinal content'
+  'Final pack contains regular, team, last, superfinal and reserve tiebreak content'
 );
 
 select is(
@@ -41,8 +41,8 @@ select is(
     from question_pack_items
     where pack_id = '90000000-0000-4000-8000-000000000003'::uuid
   ),
-  array['regular','regular','team','regular','regular','regular','last','tiebreak','double_or_nothing']::text[],
-  'Final roles are stored in the intended running order'
+  array['regular','regular','team','regular','regular','regular','last','double_or_nothing','tiebreak']::text[],
+  'normal Final flow goes from Last Question directly to Superfinal; tiebreak stays in reserve'
 );
 
 insert into rooms (code, host_secret_hash, capacity) values ('PACKREPL', 'hash', 4);
