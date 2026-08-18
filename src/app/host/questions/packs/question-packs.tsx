@@ -5,9 +5,25 @@ import { FormEvent, useEffect, useState } from "react";
 
 const ADMIN_KEY_STORAGE = "smartest-question-bank-admin-key";
 
+const ROLE_OPTIONS = [
+  { value: "regular", label: "Обычный вопрос", help: "Стандартный вопрос: обычно +1 / 0 / -1." },
+  { value: "qualifier_super", label: "Супер-вопрос · +3", help: "Сложный вопрос в конце Игры 1 или Игры 2. Правильный ответ = +3, ошибка = 0." },
+  { value: "team", label: "Командный вопрос", help: "Финалисты совещаются вместе. Правильный ответ увеличивает приз с 10 до 12 AZN." },
+  { value: "last", label: "Последний вопрос · +2", help: "Последний соревновательный вопрос финала. Правильный ответ = +2." },
+  { value: "double_or_nothing", label: "Удвоение приза", help: "Финальный A/B/C вопрос только для победителя. Обычный buzzer не используется." },
+  { value: "tiebreak", label: "Тай-брейк", help: "Резервный вопрос только если нужно разрулить ничью." },
+] as const;
+
+type QuestionRole = (typeof ROLE_OPTIONS)[number]["value"];
 type QuestionRef = { id: string; prompt: string | null; category: string | null; status: string };
-type Pack = { id: string; name: string; description: string | null; questionIds: string[]; questions: QuestionRef[] };
+type PackItem = { questionId: string; role: QuestionRole };
+type LoadedPackItem = PackItem & { correctPoints: number | null; wrongPoints: number | null; question: QuestionRef };
+type Pack = { id: string; name: string; description: string | null; questionIds: string[]; questions: QuestionRef[]; items?: LoadedPackItem[] };
 type PackPayload = { packs: Pack[]; questions: QuestionRef[]; readyQuestions: QuestionRef[] };
+
+function roleLabel(role: QuestionRole) {
+  return ROLE_OPTIONS.find((option) => option.value === role)?.label ?? "Обычный вопрос";
+}
 
 export function QuestionPacks() {
   const [adminKey, setAdminKey] = useState("");
@@ -16,7 +32,7 @@ export function QuestionPacks() {
   const [packId, setPackId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [questionIds, setQuestionIds] = useState<string[]>([]);
+  const [items, setItems] = useState<PackItem[]>([]);
   const [addQuestionId, setAddQuestionId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +41,7 @@ export function QuestionPacks() {
   async function load(key: string) {
     const response = await fetch("/api/question-packs", { headers: { "x-question-bank-key": key }, cache: "no-store" });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error ?? "Could not load question packs.");
+    if (!response.ok) throw new Error(result.error ?? "Не удалось загрузить наборы вопросов.");
     setData(result as PackPayload);
   }
 
@@ -35,7 +51,7 @@ export function QuestionPacks() {
       if (!saved) return;
       setAdminKey(saved);
       setKeyInput(saved);
-      void load(saved).catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load question packs."));
+      void load(saved).catch((caught) => setError(caught instanceof Error ? caught.message : "Не удалось загрузить наборы вопросов."));
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -50,7 +66,7 @@ export function QuestionPacks() {
       localStorage.setItem(ADMIN_KEY_STORAGE, key);
       setAdminKey(key);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not unlock packs.");
+      setError(caught instanceof Error ? caught.message : "Неверный ключ или сервис недоступен.");
     }
   }
 
@@ -58,7 +74,7 @@ export function QuestionPacks() {
     setPackId(pack.id);
     setName(pack.name);
     setDescription(pack.description ?? "");
-    setQuestionIds(pack.questionIds);
+    setItems(pack.items?.map((item) => ({ questionId: item.questionId, role: item.role })) ?? pack.questionIds.map((questionId) => ({ questionId, role: "regular" as const })));
     setNotice(null);
     setError(null);
   }
@@ -67,18 +83,22 @@ export function QuestionPacks() {
     setPackId(null);
     setName("");
     setDescription("");
-    setQuestionIds([]);
+    setItems([]);
     setAddQuestionId("");
     setNotice(null);
     setError(null);
   }
 
   function move(index: number, delta: -1 | 1) {
-    const next = [...questionIds];
+    const next = [...items];
     const target = index + delta;
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
-    setQuestionIds(next);
+    setItems(next);
+  }
+
+  function setRole(questionId: string, role: QuestionRole) {
+    setItems((current) => current.map((item) => item.questionId === questionId ? { ...item, role } : item));
   }
 
   async function save() {
@@ -90,20 +110,22 @@ export function QuestionPacks() {
       const response = await fetch("/api/question-packs", {
         method: "POST",
         headers: { "content-type": "application/json", "x-question-bank-key": adminKey },
-        body: JSON.stringify({ id: packId, name, description, questionIds }),
+        body: JSON.stringify({ id: packId, name, description, items }),
       });
       const result = await response.json();
       if (!response.ok) {
-        const message = result.error === "ERR_QUESTION_NOT_READY"
-          ? "Remove or replace archived/unavailable questions before saving this pack."
-          : result.error;
-        throw new Error(message ?? "Could not save question pack.");
+        const messages: Record<string, string> = {
+          ERR_QUESTION_NOT_READY: "В наборе есть архивный или недоступный вопрос. Удали или замени его.",
+          ERR_PACK_DUPLICATE_QUESTION: "Один и тот же вопрос нельзя добавить в набор дважды.",
+          ERR_PACK_ROLE_INVALID: "У одного из вопросов некорректный режим игры.",
+        };
+        throw new Error(messages[result.error] ?? result.error ?? "Не удалось сохранить набор.");
       }
       setPackId(result.id);
-      setNotice("Question pack saved.");
+      setNotice("Набор сохранён. Его можно загрузить у ведущего одним нажатием.");
       await load(adminKey);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save question pack.");
+      setError(caught instanceof Error ? caught.message : "Не удалось сохранить набор.");
     } finally {
       setBusy(false);
     }
@@ -112,73 +134,107 @@ export function QuestionPacks() {
   if (!adminKey) {
     return (
       <main className="stack narrow">
-        <div><p className="eyebrow">Question packs</p><h1>Saved game sets</h1><p className="muted">Use the same private owner key as Question Bank.</p></div>
+        <div>
+          <p className="eyebrow">Наборы для игры</p>
+          <h1>Готовые игры</h1>
+          <p className="muted">Здесь собираются вопросы в том порядке, в котором ведущий будет их проводить.</p>
+        </div>
         <form className="card stack" onSubmit={unlock}>
-          <label className="field"><span>Admin key</span><input type="password" value={keyInput} onChange={(event) => setKeyInput(event.target.value)} /></label>
-          <button className="primary">Unlock packs</button>
+          <label className="field"><span>Ключ владельца</span><input type="password" value={keyInput} onChange={(event) => setKeyInput(event.target.value)} /></label>
+          <button className="primary">Открыть редактор</button>
           {error ? <p className="error">{error}</p> : null}
         </form>
       </main>
     );
   }
 
-  const selectedQuestions = questionIds
-    .map((id) => data.questions.find((question) => question.id === id) ?? { id, prompt: "Unavailable question", category: null, status: "unavailable" })
-    .filter((question): question is QuestionRef => Boolean(question));
-  const availableQuestions = data.readyQuestions.filter((question) => !questionIds.includes(question.id));
-  const hasUnavailable = selectedQuestions.some((question) => question.status !== "ready");
+  const selectedQuestions = items.map((item) => ({
+    ...item,
+    question: data.questions.find((question) => question.id === item.questionId) ?? { id: item.questionId, prompt: "Недоступный вопрос", category: null, status: "unavailable" },
+  }));
+  const selectedIds = new Set(items.map((item) => item.questionId));
+  const availableQuestions = data.readyQuestions.filter((question) => !selectedIds.has(question.id));
+  const hasUnavailable = selectedQuestions.some((item) => item.question.status !== "ready");
 
   return (
     <main className="stack question-editor-shell">
       <div className="split-heading">
-        <div><p className="eyebrow">Question packs</p><h1>Saved game sets</h1><p className="muted">Build a reusable ordered set once, then queue it normally or shuffled from Host.</p></div>
-        <div className="host-actions"><button className="secondary" onClick={reset}>New pack</button><Link className="secondary" href="/host/questions">Back to Question Bank</Link></div>
+        <div>
+          <p className="eyebrow">Наборы для игры</p>
+          <h1>Готовые игры</h1>
+          <p className="muted">Собери отдельные пакеты «Игра 1», «Игра 2» и «Финал». Ведущему останется только загрузить нужный пакет.</p>
+        </div>
+        <div className="host-actions"><button className="secondary" onClick={reset}>Новый набор</button><Link className="secondary" href="/host/questions">Банк вопросов</Link></div>
       </div>
 
       <div className="lobby-grid">
         <section className="card stack">
-          <h2>Saved packs</h2>
-          {data.packs.length === 0 ? <p className="muted">No packs yet.</p> : null}
+          <h2>Сохранённые игры</h2>
+          {data.packs.length === 0 ? <p className="muted">Пока нет ни одного набора.</p> : null}
           <div className="player-list">
             {data.packs.map((pack) => (
               <button className="player-row" key={pack.id} onClick={() => edit(pack)}>
-                <span><strong>{pack.name}</strong><span className="muted compact">{pack.questionIds.length} questions</span></span>
-                <span>Edit</span>
+                <span><strong>{pack.name}</strong><span className="muted compact">{pack.questionIds.length} вопросов</span></span>
+                <span>Открыть</span>
               </button>
             ))}
           </div>
         </section>
 
         <section className="card stack">
-          <div><p className="eyebrow">{packId ? "Edit pack" : "New pack"}</p><h2>{name || "Untitled pack"}</h2></div>
-          <label className="field"><span>Name</span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Family Night" /></label>
-          <label className="field"><span>Description</span><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional note about this set" /></label>
+          <div><p className="eyebrow">{packId ? "Редактирование" : "Новый набор"}</p><h2>{name || "Без названия"}</h2></div>
+          <label className="field"><span>Название</span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Например: Игра 1 · Пилот" /></label>
+          <label className="field"><span>Заметка для ведущего</span><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Например: первая квалификационная игра, 5 обычных + супер-вопрос" /></label>
+
           <div className="question-picker-row">
             <select value={addQuestionId} onChange={(event) => setAddQuestionId(event.target.value)}>
-              <option value="">Add a Ready question...</option>
-              {availableQuestions.map((question) => <option key={question.id} value={question.id}>{question.prompt || "Image-led question"}{question.category ? ` · ${question.category}` : ""}</option>)}
+              <option value="">Добавить готовый вопрос...</option>
+              {availableQuestions.map((question) => <option key={question.id} value={question.id}>{question.prompt || "Фото-вопрос"}{question.category ? ` · ${question.category}` : ""}</option>)}
             </select>
             <button className="secondary" disabled={!addQuestionId} onClick={() => {
               if (!addQuestionId) return;
-              setQuestionIds((current) => [...current, addQuestionId]);
+              setItems((current) => [...current, { questionId: addQuestionId, role: "regular" }]);
               setAddQuestionId("");
-            }}>Add</button>
+            }}>Добавить</button>
           </div>
-          {hasUnavailable ? <p className="error">This pack contains archived or unavailable questions. Remove or replace them before saving or queueing the pack.</p> : null}
-          <div className="player-list">
-            {selectedQuestions.map((question, index) => (
-              <div className="player-row" key={question.id}>
-                <span className="seat">{index + 1}</span>
-                <span><strong>{question.prompt || "Image-led question"}</strong>{question.status !== "ready" ? <span className="error compact">{question.status}</span> : null}</span>
-                <div className="mini-actions">
-                  <button className="secondary" disabled={index === 0} onClick={() => move(index, -1)}>Up</button>
-                  <button className="secondary" disabled={index === selectedQuestions.length - 1} onClick={() => move(index, 1)}>Down</button>
-                  <button className="secondary" onClick={() => setQuestionIds((current) => current.filter((id) => id !== question.id))}>Remove</button>
+
+          {hasUnavailable ? <p className="error">В наборе есть архивный или недоступный вопрос. Удали или замени его перед сохранением.</p> : null}
+
+          <div className="stack">
+            {selectedQuestions.length === 0 ? <p className="muted compact">Добавь вопросы. Порядок здесь станет порядком игры.</p> : null}
+            {selectedQuestions.map((item, index) => {
+              const role = ROLE_OPTIONS.find((option) => option.value === item.role) ?? ROLE_OPTIONS[0];
+              return (
+                <div className="card compact-card stack" key={item.questionId}>
+                  <div className="split-heading">
+                    <div>
+                      <p className="eyebrow">Вопрос {index + 1}</p>
+                      <strong>{item.question.prompt || "Фото-вопрос"}</strong>
+                      {item.question.category ? <p className="muted compact">{item.question.category}</p> : null}
+                    </div>
+                    <span className="status-pill">{roleLabel(item.role)}</span>
+                  </div>
+
+                  <label className="field">
+                    <span>Как этот вопрос работает в игре</span>
+                    <select value={item.role} onChange={(event) => setRole(item.questionId, event.target.value as QuestionRole)}>
+                      {ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                    <small className="muted">{role.help}</small>
+                  </label>
+
+                  {item.question.status !== "ready" ? <p className="error compact">Статус: {item.question.status}</p> : null}
+                  <div className="mini-actions">
+                    <button className="secondary" disabled={index === 0} onClick={() => move(index, -1)}>Выше</button>
+                    <button className="secondary" disabled={index === selectedQuestions.length - 1} onClick={() => move(index, 1)}>Ниже</button>
+                    <button className="secondary" onClick={() => setItems((current) => current.filter((entry) => entry.questionId !== item.questionId))}>Удалить</button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-          <button className="primary" disabled={busy || !name.trim() || questionIds.length === 0 || hasUnavailable} onClick={() => void save()}>{busy ? "Saving..." : "Save pack"}</button>
+
+          <button className="primary" disabled={busy || !name.trim() || items.length === 0 || hasUnavailable} onClick={() => void save()}>{busy ? "Сохраняю..." : "Сохранить игру"}</button>
           {notice ? <p className="notice">{notice}</p> : null}
           {error ? <p className="error">{error}</p> : null}
         </section>
