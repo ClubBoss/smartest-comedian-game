@@ -42,7 +42,7 @@ export type PublicQuestionState = {
   answerRevealed: boolean;
   answer: string | null;
   explanation: string | null;
-  role: QuestionRole;
+  role?: QuestionRole;
 };
 
 export type TournamentStage = "qualifier_a" | "qualifier_b" | "final" | "complete";
