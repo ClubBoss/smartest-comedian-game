@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 const SOUNDS = ["duck", "airhorn", "bell", "gong", "siren", "bike", "kazoo", "whistle"];
 
@@ -31,6 +31,15 @@ async function join(request: APIRequestContext, room: Room, index: number): Prom
     soundType: "builtin",
     soundKey: SOUNDS[index],
   };
+}
+
+async function openHost(page: Page, room: Room) {
+  await page.goto("/host");
+  await page.evaluate(({ code, hostToken }) => {
+    localStorage.setItem("smartest-host-current-room", code);
+    localStorage.setItem(`smartest-host-${code}`, hostToken);
+  }, room);
+  await page.reload();
 }
 
 async function startTournament(request: APIRequestContext, room: Room, players: Joined[]) {
@@ -72,6 +81,38 @@ async function advance(
   });
   expect(response.ok()).toBeTruthy();
 }
+
+test("host can manually reassign 4+4 groups before starting League 8", async ({ request, page }) => {
+  const room = await createRoom(request);
+  const players: Joined[] = [];
+  for (let index = 0; index < 8; index += 1) players.push(await join(request, room, index));
+
+  await openHost(page, room);
+  const setup = page.getByLabel("Tournament Night setup");
+  await expect(setup).toBeVisible();
+  const start = setup.getByRole("button", { name: "Start Tournament Night" });
+  await expect(start).toBeEnabled();
+
+  const firstA = setup.locator("label").filter({ hasText: players[0].displayName }).getByRole("checkbox");
+  const firstB = setup.locator("label").filter({ hasText: players[4].displayName }).getByRole("checkbox");
+  await expect(firstA).toBeChecked();
+  await expect(firstB).not.toBeChecked();
+
+  await firstA.uncheck();
+  await expect(start).toBeDisabled();
+  await firstB.check();
+  await expect(start).toBeEnabled();
+  await start.click();
+
+  await expect(page.getByLabel("Tournament Night controller").getByRole("heading", { name: "Qualifier A" })).toBeVisible();
+  const state = await roomState(request, room);
+  expect(state.tournament.activePlayerIds).toEqual([
+    players[1].playerId,
+    players[2].playerId,
+    players[3].playerId,
+    players[4].playerId,
+  ]);
+});
 
 test("League 8 isolates A/B/Final scores and gates inactive buzzers", async ({ request, page }) => {
   const room = await createRoom(request);
