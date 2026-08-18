@@ -11,10 +11,10 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function tournamentStageLabel(stage: "qualifier_a" | "qualifier_b" | "final" | "complete") {
-  if (stage === "qualifier_a") return "QUALIFIER A";
-  if (stage === "qualifier_b") return "QUALIFIER B";
-  if (stage === "final") return "FINAL FOUR";
-  return "TOURNAMENT COMPLETE";
+  if (stage === "qualifier_a") return "ИГРА 1";
+  if (stage === "qualifier_b") return "ИГРА 2";
+  if (stage === "final") return "ФИНАЛ";
+  return "ИГРА ЗАВЕРШЕНА";
 }
 
 export function DisplayLobby({ code }: { code: string }) {
@@ -111,7 +111,6 @@ export function DisplayLobby({ code }: { code: string }) {
           <p className="eyebrow">{tournament ? tournamentStageLabel(tournament.currentStage) : "Room"}</p>
           <div className="display-code">{lobby.code}</div>
           <p>{tournament ? `${displayPlayers.length} playing · ${lobby.playerCount} joined` : `${lobby.playerCount} / ${lobby.capacity} players`}</p>
-          {tournament ? <p className="display-tournament-prize">Prize: <strong>{tournament.currentPrize} AZN</strong></p> : null}
           <span className={`status-pill ${realtimeStatus === "realtime" ? "live" : ""}`}>
             {realtimeStatus === "realtime" ? "Display connected" : "Display reconnecting"}
           </span>
