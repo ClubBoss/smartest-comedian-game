@@ -56,7 +56,7 @@ export async function GET(
       .eq("room_id", room.id),
     supabase
       .from("tournament_nights")
-      .select("id, format, current_stage, status, base_prize, team_bonus, champion_player_id")
+      .select("id, format, current_stage, status, champion_player_id")
       .eq("room_id", room.id)
       .maybeSingle(),
   ]);
@@ -128,9 +128,6 @@ export async function GET(
       format: tournament.format,
       currentStage: tournament.current_stage,
       status: tournament.status,
-      basePrize: tournament.base_prize,
-      teamBonus: tournament.team_bonus,
-      currentPrize: tournament.base_prize + tournament.team_bonus,
       championPlayerId: tournament.champion_player_id,
       activePlayerIds,
       members,
