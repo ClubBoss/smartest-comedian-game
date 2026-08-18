@@ -1,6 +1,6 @@
 begin;
 
-select plan(12);
+select plan(13);
 
 select has_column('public', 'room_question_queue', 'question_role', 'queued questions keep their game role');
 select has_column('public', 'question_sessions', 'question_role_snapshot', 'live questions snapshot their game role');
@@ -46,6 +46,8 @@ select is(
 );
 
 insert into rooms (code, host_secret_hash, capacity) values ('PACKROLE', 'hash', 4);
+select * from join_room_atomic('PACKROLE', 'P1', 'sound-p1', 'token-p1');
+select * from join_room_atomic('PACKROLE', 'P2', 'sound-p2', 'token-p2');
 
 select is(
   queue_question_pack_with_roles_atomic(
@@ -72,6 +74,17 @@ select start_question_atomic(
   (select question_id from room_question_queue where room_id = (select id from rooms where code = 'PACKROLE') and position = 2),
   (select id from room_question_queue where room_id = (select id from rooms where code = 'PACKROLE') and position = 2)
 );
+
+select is(
+  (
+    select question_role_snapshot
+    from question_sessions
+    where id = (select current_question_session_id from rooms where code = 'PACKROLE')
+  ),
+  'team',
+  'team role is preserved in the immutable live question snapshot'
+);
+
 select reveal_question_stimulus_atomic((select id from rooms where code = 'PACKROLE'));
 
 select throws_ok(
