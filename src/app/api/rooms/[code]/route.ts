@@ -10,6 +10,14 @@ type SnapshotAsset = {
   height?: number | null;
 };
 
+type TournamentScoreRow = {
+  stage: "qualifier_a" | "qualifier_b" | "final";
+  player_id: string;
+  seed_order: number;
+  qualified_at: string | null;
+  score: number;
+};
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ code: string }> },
@@ -31,7 +39,11 @@ export async function GET(
   }
   if (!room) return Response.json({ error: "Room not found." }, { status: 404 });
 
-  const [{ data: players, error: playersError }, { data: scoreEvents, error: scoresError }] = await Promise.all([
+  const [
+    { data: players, error: playersError },
+    { data: scoreEvents, error: scoresError },
+    { data: tournament, error: tournamentError },
+  ] = await Promise.all([
     supabase
       .from("players")
       .select("id, display_name, sound_type, sound_key, custom_sound_path, seat_order, is_ready")
@@ -42,10 +54,15 @@ export async function GET(
       .from("score_events")
       .select("id, player_id, buzz_cycle_id, kind, delta, reverted_event_id")
       .eq("room_id", room.id),
+    supabase
+      .from("tournament_nights")
+      .select("id, format, current_stage, status, base_prize, team_bonus, champion_player_id")
+      .eq("room_id", room.id)
+      .maybeSingle(),
   ]);
 
-  if (playersError || scoresError) {
-    console.error("Room relation lookup failed", playersError ?? scoresError);
+  if (playersError || scoresError || tournamentError) {
+    console.error("Room relation lookup failed", playersError ?? scoresError ?? tournamentError);
     return Response.json({ error: "Could not load room state." }, { status: 500 });
   }
 
@@ -68,6 +85,48 @@ export async function GET(
       .map((player) => player.sound_key)
       .filter((value): value is string => Boolean(value)),
   );
+
+  let tournamentState = null;
+  if (tournament) {
+    const { data: stageScores, error: stageScoresError } = await supabase
+      .from("tournament_stage_scores")
+      .select("stage, player_id, seed_order, qualified_at, score")
+      .eq("tournament_id", tournament.id);
+
+    if (stageScoresError) {
+      console.error("Tournament score lookup failed", stageScoresError);
+      return Response.json({ error: "Could not load tournament state." }, { status: 500 });
+    }
+
+    const members = ((stageScores ?? []) as TournamentScoreRow[])
+      .map((row) => ({
+        playerId: row.player_id,
+        stage: row.stage,
+        seedOrder: row.seed_order,
+        qualified: Boolean(row.qualified_at),
+        score: Number(row.score ?? 0),
+      }))
+      .sort((left, right) => left.stage.localeCompare(right.stage) || left.seedOrder - right.seedOrder);
+    const activePlayerIds = tournament.current_stage === "complete"
+      ? []
+      : members
+        .filter((member) => member.stage === tournament.current_stage)
+        .sort((left, right) => left.seedOrder - right.seedOrder)
+        .map((member) => member.playerId);
+
+    tournamentState = {
+      id: tournament.id,
+      format: tournament.format,
+      currentStage: tournament.current_stage,
+      status: tournament.status,
+      basePrize: tournament.base_prize,
+      teamBonus: tournament.team_bonus,
+      currentPrize: tournament.base_prize + tournament.team_bonus,
+      championPlayerId: tournament.champion_player_id,
+      activePlayerIds,
+      members,
+    };
+  }
 
   let buzz = null;
   if (room.active_buzz_cycle_id) {
@@ -181,5 +240,6 @@ export async function GET(
     buzz,
     canUndoScore,
     question,
+    tournament: tournamentState,
   });
 }
