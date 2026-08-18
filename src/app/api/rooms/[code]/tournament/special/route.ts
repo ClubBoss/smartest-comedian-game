@@ -26,37 +26,74 @@ export async function GET(
   const auth = await requireHostForRoom(request, rawCode);
   if ("error" in auth) return Response.json({ error: auth.error }, { status: auth.status });
 
-  const session = await currentQuestion(auth.supabase, auth.room.id);
-  if (!session || session.question_role_snapshot !== "qualifier_super") {
-    return Response.json({ sessionId: session?.id ?? null, submissions: [] });
-  }
+  const [{ data: tournament, error: tournamentError }, session] = await Promise.all([
+    auth.supabase
+      .from("tournament_nights")
+      .select("id, current_stage, status, base_prize, team_bonus, champion_player_id, final_payout, double_attempted, double_correct, double_resolved")
+      .eq("room_id", auth.room.id)
+      .maybeSingle(),
+    currentQuestion(auth.supabase, auth.room.id),
+  ]);
+  if (tournamentError || !tournament) return Response.json({ tournament: null, sessionId: session?.id ?? null, submissions: [], lastPlayed: false });
 
-  const { data: submissions, error } = await auth.supabase
-    .from("special_answer_submissions")
-    .select("player_id, answer_text, locked_at, awarded_points, awarded_at")
-    .eq("question_session_id", session.id)
-    .order("locked_at");
-  if (error) {
-    console.error("Special answer host lookup failed", error);
-    return Response.json({ error: "Could not load locked answers." }, { status: 500 });
-  }
+  const { data: finalItems } = await auth.supabase
+    .from("room_question_queue")
+    .select("question_role, state")
+    .eq("room_id", auth.room.id)
+    .eq("tournament_stage", "final");
+  const lastPlayed = (finalItems ?? []).some((item) => item.question_role === "last" && item.state === "played");
+  const doubleQueued = (finalItems ?? []).some((item) => item.question_role === "double_or_nothing" && item.state === "queued");
 
-  const playerIds = (submissions ?? []).map((item) => item.player_id);
-  const { data: players } = playerIds.length
-    ? await auth.supabase.from("players").select("id, display_name").in("id", playerIds)
-    : { data: [] as { id: string; display_name: string }[] };
-  const names = new Map((players ?? []).map((player) => [player.id, player.display_name]));
+  let submissions: Array<{
+    playerId: string;
+    playerName: string;
+    answer: string;
+    lockedAt: string;
+    awardedPoints: number | null;
+    awarded: boolean;
+  }> = [];
 
-  return Response.json({
-    sessionId: session.id,
-    submissions: (submissions ?? []).map((item) => ({
+  if (session?.question_role_snapshot === "qualifier_super") {
+    const { data: rows, error } = await auth.supabase
+      .from("special_answer_submissions")
+      .select("player_id, answer_text, locked_at, awarded_points, awarded_at")
+      .eq("question_session_id", session.id)
+      .order("locked_at");
+    if (error) {
+      console.error("Special answer host lookup failed", error);
+      return Response.json({ error: "Could not load locked answers." }, { status: 500 });
+    }
+    const playerIds = (rows ?? []).map((item) => item.player_id);
+    const { data: players } = playerIds.length
+      ? await auth.supabase.from("players").select("id, display_name").in("id", playerIds)
+      : { data: [] as { id: string; display_name: string }[] };
+    const names = new Map((players ?? []).map((player) => [player.id, player.display_name]));
+    submissions = (rows ?? []).map((item) => ({
       playerId: item.player_id,
       playerName: names.get(item.player_id) ?? "Player",
       answer: item.answer_text,
       lockedAt: item.locked_at,
       awardedPoints: item.awarded_points,
       awarded: Boolean(item.awarded_at),
-    })),
+    }));
+  }
+
+  return Response.json({
+    tournament: {
+      id: tournament.id,
+      currentStage: tournament.current_stage,
+      status: tournament.status,
+      currentPrize: tournament.base_prize + tournament.team_bonus,
+      championPlayerId: tournament.champion_player_id,
+      finalPayout: tournament.final_payout,
+      doubleAttempted: tournament.double_attempted,
+      doubleCorrect: tournament.double_correct,
+      doubleResolved: tournament.double_resolved,
+    },
+    sessionId: session?.id ?? null,
+    submissions,
+    lastPlayed,
+    doubleQueued,
   });
 }
 
@@ -112,6 +149,14 @@ export async function POST(
     if (typeof body.playerId !== "string") return Response.json({ error: "Choose the champion." }, { status: 400 });
     const session = await currentQuestion(auth.supabase, auth.room.id);
     if (session) return Response.json({ error: "Finish the current question before locking the champion." }, { status: 409 });
+    const { data: lastItem } = await auth.supabase
+      .from("room_question_queue")
+      .select("state")
+      .eq("room_id", auth.room.id)
+      .eq("tournament_stage", "final")
+      .eq("question_role", "last")
+      .maybeSingle();
+    if (lastItem?.state !== "played") return Response.json({ error: "Play the Last Question before locking the champion." }, { status: 409 });
     ({ data, error } = await auth.supabase.rpc("complete_tournament_atomic", {
       p_tournament_id: tournament.id,
       p_champion_player_id: body.playerId,
