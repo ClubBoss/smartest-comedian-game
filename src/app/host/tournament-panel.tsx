@@ -29,11 +29,9 @@ function sortMembers(members: TournamentMemberState[]) {
 export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props) {
   const [groupAIds, setGroupAIds] = useState<string[] | null>(null);
   const [selectedAdvancers, setSelectedAdvancers] = useState<string[]>([]);
-  const [selectedChampionId, setSelectedChampionId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [advanceArmed, setAdvanceArmed] = useState(false);
-  const [championArmed, setChampionArmed] = useState(false);
 
   const allPlayerIds = useMemo(() => lobby.players.map((player) => player.id), [lobby.players]);
   const defaultGroupAIds = allPlayerIds.slice(0, 4);
@@ -84,7 +82,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
     setGroupAIds([...current, playerId]);
   }
 
-  async function startTournament() {
+  async function startGames() {
     if (effectiveGroupAIds.length !== 4 || groupBIds.length !== 4) return;
     const ok = await postTournament("start", {
       groupAPlayerIds: effectiveGroupAIds,
@@ -139,10 +137,10 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
               <div className="card compact-card"><p className="eyebrow">Игра 1</p><strong>{effectiveGroupAIds.map((id) => playerName(lobby, id)).join(" · ") || "Выбери 4 игроков"}</strong></div>
               <div className="card compact-card"><p className="eyebrow">Игра 2</p><strong>{groupBIds.map((id) => playerName(lobby, id)).join(" · ")}</strong></div>
             </div>
-            <button className="primary" disabled={busy || effectiveGroupAIds.length !== 4 || groupBIds.length !== 4} onClick={() => void startTournament()}>
+            <button className="primary" disabled={busy || effectiveGroupAIds.length !== 4 || groupBIds.length !== 4} onClick={() => void startGames()}>
               {busy ? "Запускаю..." : "Начать Игру 1"}
             </button>
-            <p className="tiny muted">После старта загрузи отдельный пакет «Игра 1» в блоке вопросов. Перед Игрой 2 и Финалом загружаются их собственные пакеты.</p>
+            <p className="tiny muted">После старта просто загрузи пакет «Игра 1». Перед Игрой 2 и Финалом загрузи их отдельные пакеты.</p>
           </>
         )}
         {error ? <p className="error">{error}</p> : null}
@@ -178,7 +176,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
     });
   }
 
-  async function advanceQualifier() {
+  async function advanceGame() {
     if ((currentStage !== "qualifier_a" && currentStage !== "qualifier_b") || selectedAdvancers.length !== 2 || transitionBlocked) return;
     if (!advanceArmed) {
       setAdvanceArmed(true);
@@ -195,41 +193,6 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
     }
   }
 
-  async function lockChampion() {
-    if (currentStage !== "final" || !selectedChampionId || transitionBlocked) return;
-    if (!championArmed) {
-      setChampionArmed(true);
-      return;
-    }
-    const ok = await postTournament("final", { action: "complete", championPlayerId: selectedChampionId });
-    if (ok) setChampionArmed(false);
-  }
-
-  if (currentStage === "complete") {
-    const championName = tournament.championPlayerId ? playerName(lobby, tournament.championPlayerId) : "Победитель";
-    return (
-      <section className="card stack tournament-live-panel" aria-label="Game Night result">
-        <div className="split-heading">
-          <div><p className="eyebrow">Игра завершена</p><h2>{championName}</h2><p className="muted compact">Победитель Финала.</p></div>
-          <div className="tournament-prize-badge"><span>Приз</span><strong>{tournament.finalPayout ?? tournament.currentPrize} AZN</strong></div>
-        </div>
-        {!tournament.doubleResolved ? (
-          <div className="stack tournament-advance-box">
-            <strong>Последний выбор</strong>
-            <p className="muted compact">Победитель может забрать {tournament.currentPrize} AZN сейчас или сыграть заранее подготовленный вопрос «Удвоение приза».</p>
-            <div className="host-actions">
-              <button className="primary" disabled={busy} onClick={() => void postTournament("final", { action: "take" })}>Забрать {tournament.currentPrize} AZN</button>
-              <span className="status-pill">ИЛИ ЗАГРУЗИ ВОПРОС «УДВОЕНИЕ»</span>
-            </div>
-          </div>
-        ) : (
-          <p className="notice">Финальный денежный результат зафиксирован: {tournament.finalPayout ?? 0} AZN.</p>
-        )}
-        {error ? <p className="error">{error}</p> : null}
-      </section>
-    );
-  }
-
   return (
     <section className="card stack tournament-live-panel" aria-label="Game Night controller">
       <div className="split-heading">
@@ -238,7 +201,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
           <h2>{stageLabel(currentStage)}</h2>
           <p className="muted compact">Сейчас играют: {activeMembers.map((member) => playerName(lobby, member.playerId)).join(" · ") || "—"}</p>
         </div>
-        {currentStage === "final" ? <div className="tournament-prize-badge"><span>Приз финала</span><strong>{tournament.currentPrize} AZN</strong></div> : null}
+        {currentStage === "final" ? <span className="status-pill live">ФИНАЛ · СЧЁТ С НУЛЯ</span> : null}
       </div>
 
       {activeMembers.length > 0 ? (
@@ -251,15 +214,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
                   checked={selectedAdvancers.includes(member.playerId)}
                   onChange={() => toggleAdvancer(member.playerId)}
                 />
-              ) : (
-                <input
-                  type="radio"
-                  name="final-champion"
-                  checked={selectedChampionId === member.playerId}
-                  onChange={() => { setSelectedChampionId(member.playerId); setChampionArmed(false); }}
-                />
-              )}
-              <span className="seat">{index + 1}</span>
+              ) : <span className="seat">{index + 1}</span>}
               <strong>{playerName(lobby, member.playerId)}</strong>
               <strong className="host-score">{member.score}</strong>
               {member.qualified ? <span className="status-pill live">ПРОШЁЛ</span> : null}
@@ -282,7 +237,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
           <button
             className={advanceArmed ? "danger" : "primary"}
             disabled={busy || selectedAdvancers.length !== 2 || transitionBlocked}
-            onClick={() => void advanceQualifier()}
+            onClick={() => void advanceGame()}
           >
             {busy
               ? "Сохраняю..."
@@ -292,21 +247,13 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
                   ? "Завершить Игру 1 → Игру 2"
                   : "Завершить Игру 2 → Финал"}
           </button>
-          <p className="tiny muted">После перехода счёт новой игры начинается с 0. Затем просто загрузи её отдельный пакет вопросов.</p>
+          <p className="tiny muted">После перехода счёт новой игры начинается с 0. Затем загрузи её отдельный пакет вопросов.</p>
         </div>
       ) : null}
 
       {currentStage === "final" ? (
-        <div className="stack tournament-advance-box">
-          <p className="muted compact">Финал имеет отдельный счёт с нуля. Командный вопрос может поднять приз до 12 AZN.</p>
-          {transitionBlocked ? <p className="warning">Победителя можно зафиксировать только после завершения последнего вопроса.</p> : null}
-          <button
-            className={championArmed ? "danger" : "primary"}
-            disabled={busy || !selectedChampionId || transitionBlocked}
-            onClick={() => void lockChampion()}
-          >
-            {busy ? "Сохраняю..." : championArmed ? `ПОДТВЕРДИТЬ ПОБЕДИТЕЛЯ: ${playerName(lobby, selectedChampionId)}` : "Зафиксировать победителя Финала"}
-          </button>
+        <div className="notice">
+          <strong>Финал:</strong> базовый денежный приз 10 AZN. Если команда берёт командный вопрос — считай 12 AZN. После последнего вопроса лидер выигрывает; при ничьей используй тай-брейк. Вопрос на удвоение проводится вручную: правильно ×2, неправильно 0.
         </div>
       ) : null}
 
