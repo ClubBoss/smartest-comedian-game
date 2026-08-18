@@ -9,7 +9,13 @@ export async function POST(
   const auth = await requireHostForRoom(request, rawCode);
   if ("error" in auth) return Response.json({ error: auth.error }, { status: auth.status });
 
-  let body: { groupAPlayerIds?: unknown; groupBPlayerIds?: unknown };
+  let body: {
+    groupAPlayerIds?: unknown;
+    groupBPlayerIds?: unknown;
+    qualifierAPackId?: unknown;
+    qualifierBPackId?: unknown;
+    finalPackId?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -27,10 +33,18 @@ export async function POST(
     return Response.json({ error: "Tournament Night requires two groups of four players." }, { status: 400 });
   }
 
-  const { data, error } = await auth.supabase.rpc("create_league_8_tournament_atomic", {
+  const packIds = [body.qualifierAPackId, body.qualifierBPackId, body.finalPackId];
+  if (!packIds.every((id) => typeof id === "string") || new Set(packIds).size !== 3) {
+    return Response.json({ error: "Choose three different Question Packs for Group A, Group B and Final Four." }, { status: 400 });
+  }
+
+  const { data, error } = await auth.supabase.rpc("start_league_8_tournament_with_packs_atomic", {
     p_room_id: auth.room.id,
     p_group_a_player_ids: groupAPlayerIds,
     p_group_b_player_ids: groupBPlayerIds,
+    p_qualifier_a_pack_id: body.qualifierAPackId as string,
+    p_qualifier_b_pack_id: body.qualifierBPackId as string,
+    p_final_pack_id: body.finalPackId as string,
   });
 
   if (error) {
@@ -42,12 +56,14 @@ export async function POST(
           ? "This room already has a Tournament Night."
           : error.message.includes("ERR_LEAGUE_PLAYER_NOT_ACTIVE")
             ? "One or more selected players are no longer active in the room."
-            : null;
+            : error.message.includes("ERR_TOURNAMENT_PACK") || error.message.includes("ERR_QUESTION_NOT_READY")
+              ? "One of the three packs is missing, empty, uses the wrong role, or contains a question that is not Ready."
+              : null;
     if (message) return Response.json({ error: message }, { status: 409 });
     console.error("Tournament Night creation failed", error);
     return Response.json({ error: "Could not start Tournament Night." }, { status: 500 });
   }
 
   await broadcastRoomRefresh(auth.room.code);
-  return Response.json({ tournamentId: data });
+  return Response.json({ tournamentId: data, stage: "qualifier_a" });
 }
