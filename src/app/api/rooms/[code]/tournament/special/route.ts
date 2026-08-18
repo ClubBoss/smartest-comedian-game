@@ -1,14 +1,15 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireHostForRoom } from "@/lib/room-auth";
 import { broadcastRoomRefresh } from "@/lib/room-events";
 
-async function currentQuestion(auth: Exclude<Awaited<ReturnType<typeof requireHostForRoom>>, { error: string; status: number }>) {
-  const { data: room } = await auth.supabase
+async function currentQuestion(supabase: SupabaseClient, roomId: string) {
+  const { data: room } = await supabase
     .from("rooms")
     .select("current_question_session_id")
-    .eq("id", auth.room.id)
+    .eq("id", roomId)
     .maybeSingle();
   if (!room?.current_question_session_id) return null;
-  const { data: session } = await auth.supabase
+  const { data: session } = await supabase
     .from("question_sessions")
     .select("id, question_role_snapshot, revealed_hint_count, hint_point_schedule_snapshot, answer_revealed")
     .eq("id", room.current_question_session_id)
@@ -25,7 +26,7 @@ export async function GET(
   const auth = await requireHostForRoom(request, rawCode);
   if ("error" in auth) return Response.json({ error: auth.error }, { status: auth.status });
 
-  const session = await currentQuestion(auth);
+  const session = await currentQuestion(auth.supabase, auth.room.id);
   if (!session || session.question_role_snapshot !== "qualifier_super") {
     return Response.json({ sessionId: session?.id ?? null, submissions: [] });
   }
@@ -88,7 +89,7 @@ export async function POST(
     if (typeof body.playerId !== "string" || typeof body.correct !== "boolean") {
       return Response.json({ error: "Player and verdict are required." }, { status: 400 });
     }
-    const session = await currentQuestion(auth);
+    const session = await currentQuestion(auth.supabase, auth.room.id);
     if (!session || session.question_role_snapshot !== "qualifier_super") {
       return Response.json({ error: "The active question is not a Qualifier Super." }, { status: 409 });
     }
@@ -99,7 +100,7 @@ export async function POST(
     }));
   } else if (body.action === "team") {
     if (typeof body.correct !== "boolean") return Response.json({ error: "Team verdict is required." }, { status: 400 });
-    const session = await currentQuestion(auth);
+    const session = await currentQuestion(auth.supabase, auth.room.id);
     if (!session || session.question_role_snapshot !== "team") {
       return Response.json({ error: "The active question is not the Team Question." }, { status: 409 });
     }
@@ -109,7 +110,7 @@ export async function POST(
     }));
   } else if (body.action === "champion") {
     if (typeof body.playerId !== "string") return Response.json({ error: "Choose the champion." }, { status: 400 });
-    const session = await currentQuestion(auth);
+    const session = await currentQuestion(auth.supabase, auth.room.id);
     if (session) return Response.json({ error: "Finish the current question before locking the champion." }, { status: 409 });
     ({ data, error } = await auth.supabase.rpc("complete_tournament_atomic", {
       p_tournament_id: tournament.id,
@@ -123,7 +124,7 @@ export async function POST(
     }));
   } else if (body.action === "double_result") {
     if (typeof body.correct !== "boolean") return Response.json({ error: "Double-or-nothing verdict is required." }, { status: 400 });
-    const session = await currentQuestion(auth);
+    const session = await currentQuestion(auth.supabase, auth.room.id);
     if (!session || session.question_role_snapshot !== "double_or_nothing") {
       return Response.json({ error: "Start the Double or Nothing question first." }, { status: 409 });
     }
