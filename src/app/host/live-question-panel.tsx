@@ -68,16 +68,16 @@ function roleLabel(role: QuestionRole) {
   if (role === "qualifier_super") return "СУПЕР · +3";
   if (role === "team") return "КОМАНДНЫЙ";
   if (role === "last") return "ПОСЛЕДНИЙ · +2";
-  if (role === "double_or_nothing") return "УДВОЕНИЕ";
+  if (role === "double_or_nothing") return "СУПЕРФИНАЛ · A/B/C";
   if (role === "tiebreak") return "ТАЙ-БРЕЙК";
   return null;
 }
 
 function roleGuidance(role: QuestionRole) {
   if (role === "qualifier_super") return "Buzzer работает как обычно. За правильный ответ нажми +1 три раза. За ошибку можно оставить 0.";
-  if (role === "team") return "Все финалисты совещаются 60–90 секунд и дают один общий ответ. Buzzer не используется. Правильно — финальный приз 12 AZN вместо 10 AZN; личные очки не меняются.";
+  if (role === "team") return "Все финалисты совещаются 60–90 секунд и дают один общий ответ. Buzzer не используется, личные очки не меняются.";
   if (role === "last") return "Последний соревновательный вопрос Финала. Buzzer работает как обычно. За правильный ответ нажми +1 два раза.";
-  if (role === "double_or_nothing") return "Только победитель. Buzzer не используется. Покажи три варианта ответа: правильно — приз ×2, неправильно — приз сгорает. Денежный итог фиксируй вручную.";
+  if (role === "double_or_nothing") return "Только победитель. Buzzer не используется. Покажи три варианта A/B/C; все дополнительные условия ведущий проговаривает устно — приложение ничего отдельно не считает.";
   if (role === "tiebreak") return "Резервный sudden-death вопрос. Используй только при ничьей; победитель этого вопроса проходит дальше.";
   return null;
 }
@@ -277,6 +277,7 @@ export function LiveQuestionPanel({
   if (gameMode) {
     return (
       <section className="card stack live-question-host">
+        <HostPackControls code={code} hostToken={hostToken} onRoomRefresh={onRoomRefresh} />
         <div className="compact-question-queue">
           <div>
             <p className="eyebrow">Next question</p>
