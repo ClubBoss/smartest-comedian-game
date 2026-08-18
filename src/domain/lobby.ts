@@ -31,15 +31,23 @@ export type PublicQuestionAsset = {
   url: string | null;
 };
 
+export type TournamentQuestionRole = "regular" | "qualifier_super" | "team" | "last" | "double_or_nothing" | "tiebreak";
+
 export type PublicQuestionState = {
   sessionId: string;
   stimulusRevealed: boolean;
   prompt: string | null;
   assets: PublicQuestionAsset[];
   revealedHints: string[];
+  revealedHintCount: number;
   answerRevealed: boolean;
   answer: string | null;
   explanation: string | null;
+  tournamentStage: "qualifier_a" | "qualifier_b" | "final" | null;
+  tournamentRole: TournamentQuestionRole;
+  correctPoints: number | null;
+  wrongPoints: number | null;
+  hintPointSchedule: number[];
 };
 
 export type TournamentStage = "qualifier_a" | "qualifier_b" | "final" | "complete";
@@ -61,6 +69,9 @@ export type TournamentPublicState = {
   teamBonus: number;
   currentPrize: number;
   championPlayerId: string | null;
+  finalPayout: number | null;
+  doubleAttempted: boolean;
+  doubleCorrect: boolean | null;
   activePlayerIds: string[];
   members: TournamentMemberState[];
 };
