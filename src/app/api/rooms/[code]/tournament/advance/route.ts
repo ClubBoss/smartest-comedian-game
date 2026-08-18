@@ -35,7 +35,22 @@ export async function POST(
     console.error("Tournament transition room-state lookup failed", roomStateError);
     return Response.json({ error: "Could not verify current game state." }, { status: 500 });
   }
-  if (liveRoom?.current_question_session_id || liveRoom?.active_buzz_cycle_id) {
+
+  let hasOpenBuzzCycle = false;
+  if (liveRoom?.active_buzz_cycle_id) {
+    const { data: cycle, error: cycleError } = await auth.supabase
+      .from("buzz_cycles")
+      .select("closed_at")
+      .eq("id", liveRoom.active_buzz_cycle_id)
+      .maybeSingle();
+    if (cycleError) {
+      console.error("Tournament transition buzzer lookup failed", cycleError);
+      return Response.json({ error: "Could not verify current buzzer state." }, { status: 500 });
+    }
+    hasOpenBuzzCycle = Boolean(cycle && !cycle.closed_at);
+  }
+
+  if (liveRoom?.current_question_session_id || hasOpenBuzzCycle) {
     return Response.json({ error: "Finish the current question and buzzer cycle before changing tournament stage." }, { status: 409 });
   }
 
