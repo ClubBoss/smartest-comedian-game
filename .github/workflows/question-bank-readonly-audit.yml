@@ -1,0 +1,96 @@
+name: Question Bank Readonly Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/question-bank-readonly-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LIVE_URL: https://smartest-comedian-game.blufferus.workers.dev
+      QUESTION_BANK_ADMIN_KEY: ${{ secrets.QUESTION_BANK_ADMIN_KEY }}
+    steps:
+      - name: Validate secret presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${QUESTION_BANK_ADMIN_KEY:-}" || { echo "QUESTION_BANK_ADMIN_KEY is unavailable to this workflow" >&2; exit 1; }
+
+      - name: Read production health and Question Bank
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location "$LIVE_URL/api/health" -o /tmp/health.json
+          curl --fail --silent --show-error --location \
+            -H "x-question-bank-key: $QUESTION_BANK_ADMIN_KEY" \
+            "$LIVE_URL/api/questions" -o /tmp/questions.json
+          curl --fail --silent --show-error --location \
+            -H "x-question-bank-key: $QUESTION_BANK_ADMIN_KEY" \
+            "$LIVE_URL/api/question-packs" -o /tmp/packs.json
+
+      - name: Print sanitized audit inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
+          const questionsPayload = JSON.parse(fs.readFileSync('/tmp/questions.json', 'utf8'));
+          const packsPayload = JSON.parse(fs.readFileSync('/tmp/packs.json', 'utf8'));
+
+          const questions = (questionsPayload.questions ?? []).map((q) => ({
+            id: q.id,
+            prompt: q.prompt,
+            answer: q.answer,
+            answerVariants: q.answerVariants ?? [],
+            explanation: q.explanation,
+            hostNotes: q.hostNotes,
+            category: q.category,
+            difficulty: q.difficulty,
+            sourceLabel: q.sourceLabel,
+            status: q.status,
+            hints: q.hints ?? [],
+            tags: q.tags ?? [],
+            assets: (q.assets ?? []).map((a) => ({
+              id: a.id,
+              storagePath: a.storagePath,
+              mimeType: a.mimeType,
+              altText: a.altText,
+              caption: a.caption,
+              width: a.width,
+              height: a.height,
+            })),
+          }));
+
+          const packs = (packsPayload.packs ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            questionIds: p.questionIds ?? [],
+            questions: p.questions ?? [],
+          }));
+
+          const audit = {
+            health: {
+              ok: health.ok,
+              database: health.database,
+              buildSha: health.buildSha,
+            },
+            questionCount: questions.length,
+            readyCount: questions.filter((q) => q.status === 'ready').length,
+            packCount: packs.length,
+            questions,
+            packs,
+          };
+
+          console.log('QUESTION_BANK_AUDIT_JSON_START');
+          console.log(JSON.stringify(audit, null, 2));
+          console.log('QUESTION_BANK_AUDIT_JSON_END');
+          NODE
