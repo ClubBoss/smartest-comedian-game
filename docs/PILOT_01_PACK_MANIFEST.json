@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "pilot": "Pilot 01",
+  "runtime": "three_independent_games",
+  "questionOrderLock": "complete",
+  "productionSync": "blocked_on_question_bank_owner_key",
+  "notes": [
+    "This manifest locks package membership, order, and role only.",
+    "questionId remains null until the production Question Bank is directly inspected.",
+    "Do not rewrite approved wording, hints, answers, answer variants, sources, or media during ID mapping.",
+    "All score handling remains ordinary/manual unless separately proven and approved.",
+    "No item uses a Double-or-Nothing or money/prize role."
+  ],
+  "packs": [
+    {
+      "key": "qualifier_a",
+      "name": "Qualifier A",
+      "description": "Pilot 01 · Qualifier A · fixed order · fresh independent game",
+      "randomize": false,
+      "items": [
+        { "order": 1, "contentKey": "mary_smith_knocker_up", "internalLabel": "Mary Smith — living alarm clock / knocker-up", "role": "regular", "questionId": null, "wordingStatus": "recovered", "scoreControl": "manual" },
+        { "order": 2, "contentKey": "spider_gift", "internalLabel": "Spider gift", "role": "regular", "questionId": null, "wordingStatus": "partial_recovery", "scoreControl": "manual" },
+        { "order": 3, "contentKey": "groom_of_the_stool", "internalLabel": "Groom of the Stool", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 4, "contentKey": "mummy_brown", "internalLabel": "Mummy Brown", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 5, "contentKey": "berners_street_hoax", "internalLabel": "Berners Street Hoax", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 6, "contentKey": "apollo_insurance_covers", "internalLabel": "Apollo insurance covers", "role": "qualifier_super", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" }
+      ]
+    },
+    {
+      "key": "qualifier_b",
+      "name": "Qualifier B",
+      "description": "Pilot 01 · Qualifier B · fixed order · fresh independent game",
+      "randomize": false,
+      "items": [
+        { "order": 1, "contentKey": "garlic", "internalLabel": "Garlic", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 2, "contentKey": "wife_sale", "internalLabel": "Wife sale", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 3, "contentKey": "cardiff_giant", "internalLabel": "Cardiff Giant", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 4, "contentKey": "nasa_toilet", "internalLabel": "NASA toilet", "role": "regular", "questionId": null, "wordingStatus": "partial_recovery", "scoreControl": "manual" },
+        { "order": 5, "contentKey": "poison_squad", "internalLabel": "Poison Squad", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 6, "contentKey": "princess_caraboo", "internalLabel": "Princess Caraboo", "role": "qualifier_super", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" }
+      ]
+    },
+    {
+      "key": "final",
+      "name": "Final",
+      "description": "Pilot 01 · Final · fixed order · fresh independent game",
+      "randomize": false,
+      "items": [
+        { "order": 1, "contentKey": "cuttlefish_disguise", "internalLabel": "Cuttlefish disguise / Каракатица с двумя образами", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 2, "contentKey": "cadaver_synod", "internalLabel": "Corpse trial / Cadaver Synod / Суд над трупом папы", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 3, "contentKey": "hanoi_rat_tails", "internalLabel": "Hanoi rat tails / Ханойские крысы", "role": "team", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 4, "contentKey": "roland_the_farter", "internalLabel": "Roland-the-Farter / Роланд-Пердун", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 5, "contentKey": "radithor", "internalLabel": "Radioactive Radithor", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 6, "contentKey": "therese_humbert", "internalLabel": "Thérèse Humbert — fake inheritance", "role": "regular", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 7, "contentKey": "poyais", "internalLabel": "Poyais", "role": "last", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual" },
+        { "order": 8, "contentKey": "heroin_final_abc", "internalLabel": "Heroin — final A/B/C", "role": "final_abc", "questionId": null, "wordingStatus": "production_verify_required", "scoreControl": "manual", "legacyRoleExplicitlyRejected": "double_or_nothing" }
+      ]
+    }
+  ]
+}
