@@ -4,7 +4,9 @@
 
 `RUNTIME_DIRECTION = CANONICAL`
 
-`CONTENT_LOCK = PARTIAL — FINAL TAIL RECOVERY REQUIRED`
+`QUESTION_ORDER_LOCK = COMPLETE`
+
+`PRODUCTION_CONTENT_SYNC = UNVERIFIED`
 
 This document supersedes Tournament Night V1 as the product/run-of-show authority for Pilot 01. It does **not** claim that the listed questions already exist in the production Question Bank or that the three saved production packs have already been created.
 
@@ -29,11 +31,11 @@ The host determines advancement manually outside the app and starts each game ma
 
 The normal Room + Question Bank + ordered Question Pack + buzzer/scoring/recovery flow is the runtime foundation.
 
-## Canonical recovered assignment
+## Canonical Pilot 01 assignment
 
-Do not rewrite, replace, reshuffle, or fill unresolved slots by analogy. Exact question wording, hints, answer variants, correct-answer mapping and media are Question Bank data and must be recovered from the approved registry before import.
+The package membership and order below are locked. Do not rewrite, replace or reshuffle these questions while implementing the packs. Exact approved question wording, hints, answer variants, correct-answer mapping and media remain Question Bank data and must be verified against the approved registry before production sync.
 
-### Qualifier A — recovered order
+### Qualifier A — locked order
 
 1. Mary Smith — living alarm clock / knocker-up
 2. Spider gift
@@ -42,7 +44,7 @@ Do not rewrite, replace, reshuffle, or fill unresolved slots by analogy. Exact q
 5. Berners Street Hoax
 6. **Qualifier Super:** Apollo insurance covers
 
-### Qualifier B — recovered order
+### Qualifier B — locked order
 
 1. Garlic
 2. Wife sale
@@ -51,21 +53,22 @@ Do not rewrite, replace, reshuffle, or fill unresolved slots by analogy. Exact q
 5. Poison Squad
 6. **Qualifier Super:** Princess Caraboo
 
-### Final — safely recovered prefix and role anchor
-
-The interrupted canonical assignment pass safely recovers this sequence:
+### Final — locked order
 
 1. Cuttlefish disguise / «Каракатица с двумя образами»
 2. Corpse trial / Cadaver Synod / «Суд над трупом папы»
 3. **Team Question:** Hanoi rat tails / «Ханойские крысы»
 4. Roland-the-Farter / «Роланд-Пердун»
 5. Radioactive Radithor
+6. Thérèse Humbert — fake inheritance
+7. **Last Question:** Poyais
+8. **Final A/B/C:** heroin question
 
-The remaining Final tail, exact remaining order, and any Last/final-super role assignment are **not safely recovered yet**. They are intentionally left unresolved here rather than invented.
+The eighth question was originally assigned to the old Double-or-Nothing slot. Pilot 01 preserves the approved question and its final A/B/C position, but **does not preserve the wager/economy**: there is no money, prize doubling, prize loss or Double-or-Nothing state. Any score handling is performed through the ordinary/manual game controls.
 
 ## Content quality lock
 
-For recovered/approved questions, preserve the prior content contract:
+For approved questions, preserve the prior content contract:
 
 - short natural spoken setup
 - non-leading question
@@ -94,13 +97,11 @@ The previously merged Tournament Night database/API work is legacy implementatio
 
 ## Closure gate
 
-Pilot 01 content is complete only when all of the following are true:
+The **question-order assignment is closed**. Production content delivery is complete only when all of the following are independently verified:
 
-1. exact Final tail is recovered from the approved registry/assignment pass — no invention;
-2. exact wording/hints/answers for every assigned question are verified;
-3. production Question Bank is checked and missing questions are imported;
-4. exactly three ordered saved packs exist: `Qualifier A`, `Qualifier B`, `Final`;
-5. approved high-EV photo assets are attached where applicable;
-6. QA runs each pack in a separate fresh game and confirms score isolation, exact order, hints/photos, buzzer cycles, scoring and host recovery.
+1. exact approved wording/hints/answers for every assigned question are present in the production Question Bank;
+2. exactly three ordered saved packs exist: `Qualifier A`, `Qualifier B`, `Final`;
+3. approved high-EV photo assets are attached where applicable;
+4. QA runs each pack in a separate fresh game and confirms score isolation, exact order, hints/photos, buzzer cycles, scoring and host recovery.
 
-Until then, `CONTENT_LOCK` remains partial even though the runtime direction is final.
+Until production data is directly inspected, `PRODUCTION_CONTENT_SYNC` remains unverified rather than assumed.
