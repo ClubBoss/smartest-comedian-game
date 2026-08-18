@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HostPackControls } from "./host-pack-controls";
 import { HostQueueEditor } from "./host-queue-editor";
-import { HostSpecialQuestionControls } from "./host-special-question-controls";
 import { SafeFinishButton } from "./safe-finish-button";
 
 type QuestionRole = "regular" | "qualifier_super" | "team" | "last" | "double_or_nothing" | "tiebreak";
@@ -24,8 +23,6 @@ type QueueItem = {
   prompt: string;
   category: string | null;
   role: QuestionRole;
-  correctPoints: number | null;
-  wrongPoints: number | null;
 };
 
 type PrivateAsset = {
@@ -53,8 +50,6 @@ type CurrentQuestion = {
   revealedHintCount: number;
   answerRevealed: boolean;
   role: QuestionRole;
-  correctPoints: number | null;
-  wrongPoints: number | null;
 };
 
 type AdminState = {
@@ -69,12 +64,21 @@ export type QuestionReadiness = {
   current: boolean;
 };
 
-function roleLabel(role: QuestionRole, points: number | null) {
-  if (role === "qualifier_super") return `СУПЕР · +${points ?? 3}`;
+function roleLabel(role: QuestionRole) {
+  if (role === "qualifier_super") return "СУПЕР · +3";
   if (role === "team") return "КОМАНДНЫЙ";
-  if (role === "last") return `ПОСЛЕДНИЙ · +${points ?? 2}`;
+  if (role === "last") return "ПОСЛЕДНИЙ · +2";
   if (role === "double_or_nothing") return "УДВОЕНИЕ";
   if (role === "tiebreak") return "ТАЙ-БРЕЙК";
+  return null;
+}
+
+function roleGuidance(role: QuestionRole) {
+  if (role === "qualifier_super") return "Buzzer работает как обычно. За правильный ответ нажми +1 три раза. За ошибку можно оставить 0.";
+  if (role === "team") return "Все финалисты совещаются 60–90 секунд и дают один общий ответ. Buzzer не используется. Правильно — финальный приз 12 AZN вместо 10 AZN; личные очки не меняются.";
+  if (role === "last") return "Последний соревновательный вопрос Финала. Buzzer работает как обычно. За правильный ответ нажми +1 два раза.";
+  if (role === "double_or_nothing") return "Только победитель. Buzzer не используется. Покажи три варианта ответа: правильно — приз ×2, неправильно — приз сгорает. Денежный итог фиксируй вручную.";
+  if (role === "tiebreak") return "Резервный sudden-death вопрос. Используй только при ничьей; победитель этого вопроса проходит дальше.";
   return null;
 }
 
@@ -186,7 +190,8 @@ export function LiveQuestionPanel({
   if (state.current) {
     const current = state.current;
     const canRevealHint = current.stimulusRevealed && current.revealedHintCount < current.hints.length && !current.answerRevealed;
-    const specialLabel = roleLabel(current.role, current.correctPoints);
+    const specialLabel = roleLabel(current.role);
+    const guidance = roleGuidance(current.role);
     return (
       <section className="card stack live-question-host">
         <div className="split-heading">
@@ -201,6 +206,12 @@ export function LiveQuestionPanel({
             </span>
           </div>
         </div>
+
+        {guidance ? (
+          <div className="notice">
+            <strong>Как провести этот вопрос:</strong> {guidance}
+          </div>
+        ) : null}
 
         {current.assets.length > 0 ? (
           <div className="host-question-images">
@@ -232,15 +243,6 @@ export function LiveQuestionPanel({
           </div>
         ) : null}
 
-        <HostSpecialQuestionControls
-          code={code}
-          hostToken={hostToken}
-          role={current.role}
-          correctPoints={current.correctPoints}
-          wrongPoints={current.wrongPoints}
-          onRefresh={async () => { await load(); await onRoomRefresh(); }}
-        />
-
         <div className="live-question-actions">
           <button className={`primary ${!current.stimulusRevealed ? "next-action" : ""}`} data-host-hotkey="show" disabled={busy || current.stimulusRevealed} onClick={() => void act("reveal-stimulus")}>Show question</button>
           <button className="secondary" data-host-hotkey="h" disabled={busy || !canRevealHint} onClick={() => void act("reveal-hint")}>Reveal next hint</button>
@@ -266,7 +268,7 @@ export function LiveQuestionPanel({
         ) : null}
 
         {!current.stimulusRevealed ? <p className="muted compact">TV and players cannot see the prompt, photos, hints or answer yet. Buzzer is intentionally blocked until Show question.</p> : null}
-        {(current.role === "team" || current.role === "double_or_nothing") && current.stimulusRevealed ? <p className="notice">Для этого типа вопроса обычная кнопка buzzer не используется.</p> : null}
+        {(current.role === "team" || current.role === "double_or_nothing") && current.stimulusRevealed ? <p className="notice">Этот вопрос проводится без buzzer.</p> : null}
         {error ? <p className="error">{error}</p> : null}
       </section>
     );
@@ -276,7 +278,11 @@ export function LiveQuestionPanel({
     return (
       <section className="card stack live-question-host">
         <div className="compact-question-queue">
-          <div><p className="eyebrow">Next question</p><h2>{queued[0]?.prompt || (queued.length > 0 ? "Image-led question" : "Queue is empty")}</h2><p className="muted compact">{queued.length} queued</p></div>
+          <div>
+            <p className="eyebrow">Next question</p>
+            <h2>{queued[0]?.prompt || (queued.length > 0 ? "Image-led question" : "Queue is empty")}</h2>
+            <p className="muted compact">{queued.length} queued{queued[0] && roleLabel(queued[0].role) ? ` · ${roleLabel(queued[0].role)}` : ""}</p>
+          </div>
           <button className="primary next-action" data-host-hotkey="n" disabled={busy || queued.length === 0} onClick={() => void act("start-next")}>Preload next</button>
         </div>
         <HostQueueEditor
@@ -327,7 +333,7 @@ export function LiveQuestionPanel({
             <span className="seat">{index + 1}</span>
             <div>
               <strong>{item.prompt || "Image-led question"}</strong>
-              <p className="muted compact">{roleLabel(item.role, item.correctPoints) ?? item.category ?? "Обычный вопрос"}</p>
+              <p className="muted compact">{roleLabel(item.role) ?? item.category ?? "Обычный вопрос"}</p>
             </div>
             <div className="mini-actions">
               <button className="secondary" disabled={busy || index === 0} onClick={() => void act("move", { queueItemId: item.id, direction: -1 })}>Up</button>
