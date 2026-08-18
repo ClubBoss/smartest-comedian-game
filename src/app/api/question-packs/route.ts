@@ -11,7 +11,7 @@ async function loadPacks() {
   const supabase = getSupabaseAdmin();
   const [{ data: packs, error: packsError }, { data: items, error: itemsError }, { data: questions, error: questionsError }] = await Promise.all([
     supabase.from("question_packs").select("id, name, description, created_at, updated_at").order("updated_at", { ascending: false }),
-    supabase.from("question_pack_items").select("pack_id, question_id, position, question_role, correct_points, wrong_points").order("position"),
+    supabase.from("question_pack_items").select("pack_id, question_id, position, question_role").order("position"),
     supabase.from("questions").select("id, prompt, category, status, updated_at").order("updated_at", { ascending: false }),
   ]);
   if (packsError || itemsError || questionsError) throw packsError ?? itemsError ?? questionsError;
@@ -36,8 +36,6 @@ async function loadPacks() {
         items: packItems.map((item) => ({
           questionId: item.question_id,
           role: item.question_role ?? "regular",
-          correctPoints: item.correct_points,
-          wrongPoints: item.wrong_points,
           question: questionMap.get(item.question_id) ?? { id: item.question_id, prompt: "Unavailable question", category: null, status: "unavailable" },
         })),
         questions: packItems.map((item) => questionMap.get(item.question_id) ?? { id: item.question_id, prompt: "Unavailable question", category: null, status: "unavailable" }),
