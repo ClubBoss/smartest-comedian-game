@@ -1,6 +1,6 @@
 "use client";
 
-import type { LobbyState, TournamentMemberState } from "@/domain/lobby";
+import type { LobbyState, TournamentMemberState, TournamentStage } from "@/domain/lobby";
 import { resolveTopTwo } from "@/domain/tournament";
 import { useMemo, useState } from "react";
 
@@ -11,7 +11,7 @@ type Props = {
   gameMode: boolean;
 };
 
-function stageLabel(stage: LobbyState["tournament"] extends infer _T ? string : never) {
+function stageLabel(stage: TournamentStage) {
   if (stage === "qualifier_a") return "Qualifier A";
   if (stage === "qualifier_b") return "Qualifier B";
   if (stage === "final") return "Final Four";
@@ -145,10 +145,11 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
     );
   }
 
-  const currentStage = tournament.currentStage;
+  const activeTournament = tournament;
+  const currentStage = activeTournament.currentStage;
   const activeMembers = currentStage === "complete"
     ? []
-    : sortMembers(tournament.members.filter((member) => member.stage === currentStage));
+    : sortMembers(activeTournament.members.filter((member) => member.stage === currentStage));
   const qualifierResolution = currentStage === "qualifier_a" || currentStage === "qualifier_b"
     ? activeMembers.length === 4
       ? resolveTopTwo(activeMembers.map((member) => ({
@@ -179,7 +180,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
       return;
     }
     const ok = await postTournament("advance", {
-      tournamentId: tournament.id,
+      tournamentId: activeTournament.id,
       stage: currentStage,
       advancingPlayerIds: selectedAdvancers,
     });
@@ -197,7 +198,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
           <h2>{stageLabel(currentStage)}</h2>
           <p className="muted compact">Active players: {activeMembers.map((member) => playerName(lobby, member.playerId)).join(" · ") || "None"}</p>
         </div>
-        <div className="tournament-prize-badge"><span>Final prize</span><strong>{tournament.currentPrize} AZN</strong></div>
+        <div className="tournament-prize-badge"><span>Final prize</span><strong>{activeTournament.currentPrize} AZN</strong></div>
       </div>
 
       {activeMembers.length > 0 ? (
