@@ -21,7 +21,7 @@ export async function POST(
       return Response.json({ error: "ERR_STIMULUS_HIDDEN" }, { status: 409 });
     }
     if (error.message.includes("ERR_QUESTION_ROLE_NO_BUZZ")) {
-      return Response.json({ error: "This special question does not use the buzzer. Use the special controls next to the question." }, { status: 409 });
+      return Response.json({ error: "This special question does not use the buzzer. Follow the host note shown with the question." }, { status: 409 });
     }
     console.error("Open buzzer failed", error);
     return Response.json({ error: "Could not open buzzer." }, { status: 500 });
