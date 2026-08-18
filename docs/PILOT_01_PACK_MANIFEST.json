@@ -1,18 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "pilot": "Pilot 01",
+  "revision": "difficulty_v2_2",
   "runtime": "three_independent_games",
   "questionOrderLock": "complete",
   "productionSync": "verified",
-  "productionVerifiedAt": "2026-08-18T17:28:57Z",
+  "productionVerifiedAt": "2026-08-18T23:32:50Z",
   "productionBuildSha": "2102da4cd265dbb06aee7de871781a4f1162f279",
   "notes": [
-    "This manifest locks package membership, order, role, and verified production question IDs.",
-    "Production Question Bank was read back after sync: exactly 20 pilot01 questions are Ready and the three canonical packs are 6/6/8 in this order.",
-    "Two pre-existing non-Pilot test questions were preserved and are not part of these packs.",
-    "The production wording uses recovered approved wording where available and a source-backed final editorial pass where the exact earlier text did not survive.",
-    "All score handling remains ordinary/manual unless separately proven and approved.",
-    "No item uses a Double-or-Nothing or money/prize role; production verification found zero forbidden Double-or-Nothing tags."
+    "V2.2 difficulty calibration was applied in place to the existing 20 production question UUIDs.",
+    "Production read-back verified exactly 20 pilot01 Ready questions, two pre-existing non-Pilot questions preserved, and canonical packs 6/6/8 unchanged by UUID/order.",
+    "Five underlying question topics were replaced while retaining their slot UUIDs: Mary Smith -> Elmer McCurdy; Mummy Brown -> bowerbird forced perspective; NASA toilet -> flatworm penis fencing; Hanoi rat tails -> Great Stork Derby; Heroin final -> John Brinkley goat glands.",
+    "Forbidden Double-or-Nothing tags after verification: 0."
   ],
   "packs": [
     {
@@ -21,12 +20,12 @@
       "description": "Pilot 01 · Qualifier A · fixed order · fresh independent game",
       "randomize": false,
       "items": [
-        { "order": 1, "contentKey": "mary_smith_knocker_up", "internalLabel": "Mary Smith — living alarm clock / knocker-up", "role": "regular", "questionId": "33671e68-4132-42f1-8b75-7c7dd28da440", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 2, "contentKey": "spider_gift", "internalLabel": "Spider gift", "role": "regular", "questionId": "8a582797-3a34-4722-a828-b2cffd62364a", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 3, "contentKey": "groom_of_the_stool", "internalLabel": "Groom of the Stool", "role": "regular", "questionId": "a53bf174-f640-4dfc-949c-3b59743117d0", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 4, "contentKey": "mummy_brown", "internalLabel": "Mummy Brown", "role": "regular", "questionId": "21cdc9e9-2a30-4a99-b0af-5f146d4e38f9", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 5, "contentKey": "berners_street_hoax", "internalLabel": "Berners Street Hoax", "role": "regular", "questionId": "2e18bb2d-28db-4605-93f6-e2a9b5ea694e", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 6, "contentKey": "apollo_insurance_covers", "internalLabel": "Apollo insurance covers", "role": "qualifier_super", "questionId": "562379b3-04e9-40ce-b7d8-9f75a87b324e", "wordingStatus": "production_verified", "scoreControl": "manual" }
+        {"order":1,"contentKey":"elmer_mccurdy_funhouse","internalLabel":"Elmer McCurdy — fake brothers / traveling corpse","role":"regular","questionId":"33671e68-4132-42f1-8b75-7c7dd28da440","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":2,"contentKey":"spider_gift","internalLabel":"Spider gift — cost of deception","role":"regular","questionId":"8a582797-3a34-4722-a828-b2cffd62364a","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":3,"contentKey":"groom_of_the_stool","internalLabel":"Groom of the Stool","role":"regular","questionId":"a53bf174-f640-4dfc-949c-3b59743117d0","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":4,"contentKey":"bowerbird_forced_perspective","internalLabel":"Great bowerbird — forced perspective","role":"regular","questionId":"21cdc9e9-2a30-4a99-b0af-5f146d4e38f9","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":5,"contentKey":"berners_street_hoax","internalLabel":"Berners Street Hoax — wager","role":"regular","questionId":"2e18bb2d-28db-4605-93f6-e2a9b5ea694e","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":6,"contentKey":"apollo_insurance_covers","internalLabel":"Apollo insurance covers","role":"qualifier_super","questionId":"562379b3-04e9-40ce-b7d8-9f75a87b324e","wordingStatus":"production_verified_v2_2","scoreControl":"manual"}
       ]
     },
     {
@@ -35,12 +34,12 @@
       "description": "Pilot 01 · Qualifier B · fixed order · fresh independent game",
       "randomize": false,
       "items": [
-        { "order": 1, "contentKey": "garlic", "internalLabel": "Garlic", "role": "regular", "questionId": "06b8fa5b-1b79-42c7-b446-0749d26ac207", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 2, "contentKey": "wife_sale", "internalLabel": "Wife sale", "role": "regular", "questionId": "90b575d1-aca4-44bb-b303-c6cd8d5a856a", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 3, "contentKey": "cardiff_giant", "internalLabel": "Cardiff Giant", "role": "regular", "questionId": "fe1ed1be-29c3-4765-84aa-bee7bc458955", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 4, "contentKey": "nasa_toilet", "internalLabel": "NASA toilet", "role": "regular", "questionId": "86cff638-a194-4f28-948f-b07951df9d64", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 5, "contentKey": "poison_squad", "internalLabel": "Poison Squad", "role": "regular", "questionId": "e67250b6-fdbe-4b6a-b630-460428e7ea63", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 6, "contentKey": "princess_caraboo", "internalLabel": "Princess Caraboo", "role": "qualifier_super", "questionId": "c31a47bc-4da4-4aff-a49f-578aee9b89d9", "wordingStatus": "production_verified", "scoreControl": "manual" }
+        {"order":1,"contentKey":"garlic","internalLabel":"Ancient Egyptian garlic test","role":"regular","questionId":"06b8fa5b-1b79-42c7-b446-0749d26ac207","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":2,"contentKey":"wife_sale","internalLabel":"English wife sale","role":"regular","questionId":"90b575d1-aca4-44bb-b303-c6cd8d5a856a","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":3,"contentKey":"cardiff_giant","internalLabel":"Cardiff Giant — fake of a fake","role":"regular","questionId":"fe1ed1be-29c3-4765-84aa-bee7bc458955","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":4,"contentKey":"flatworm_penis_fencing","internalLabel":"Flatworm penis fencing","role":"regular","questionId":"86cff638-a194-4f28-948f-b07951df9d64","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":5,"contentKey":"poison_squad","internalLabel":"Poison Squad","role":"regular","questionId":"e67250b6-fdbe-4b6a-b630-460428e7ea63","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":6,"contentKey":"princess_caraboo","internalLabel":"Princess Caraboo","role":"qualifier_super","questionId":"c31a47bc-4da4-4aff-a49f-578aee9b89d9","wordingStatus":"production_verified_v2_2","scoreControl":"manual"}
       ]
     },
     {
@@ -49,14 +48,14 @@
       "description": "Pilot 01 · Final · fixed order · fresh independent game",
       "randomize": false,
       "items": [
-        { "order": 1, "contentKey": "cuttlefish_disguise", "internalLabel": "Cuttlefish disguise / Каракатица с двумя образами", "role": "regular", "questionId": "ee295c17-7604-4f65-8ac2-72e81a00b411", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 2, "contentKey": "cadaver_synod", "internalLabel": "Corpse trial / Cadaver Synod / Суд над трупом папы", "role": "regular", "questionId": "63a4747f-a49d-47e4-a5de-744203039542", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 3, "contentKey": "hanoi_rat_tails", "internalLabel": "Hanoi rat tails / Ханойские крысы", "role": "team", "questionId": "0064770a-6e6c-4de8-9231-568e197e2dcd", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 4, "contentKey": "roland_the_farter", "internalLabel": "Roland-the-Farter / Роланд-Пердун", "role": "regular", "questionId": "1c8b89e8-bee7-431d-a56a-c01a0acb8b14", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 5, "contentKey": "radithor", "internalLabel": "Radioactive Radithor", "role": "regular", "questionId": "f95649f9-29fc-4e87-be87-ba414a5e22f8", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 6, "contentKey": "therese_humbert", "internalLabel": "Thérèse Humbert — fake inheritance", "role": "regular", "questionId": "169ab247-1b0f-4707-88a0-3c6d5aaf879b", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 7, "contentKey": "poyais", "internalLabel": "Poyais", "role": "last", "questionId": "704e2046-6bd6-40e1-91e9-08980f6e16d1", "wordingStatus": "production_verified", "scoreControl": "manual" },
-        { "order": 8, "contentKey": "heroin_final_abc", "internalLabel": "Heroin — final A/B/C", "role": "final_abc", "questionId": "1a5362e8-5b49-477b-a292-7bb89f7ede94", "wordingStatus": "production_verified", "scoreControl": "manual", "legacyRoleExplicitlyRejected": "double_or_nothing" }
+        {"order":1,"contentKey":"cuttlefish_disguise","internalLabel":"Cuttlefish tactical disguise","role":"regular","questionId":"ee295c17-7604-4f65-8ac2-72e81a00b411","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":2,"contentKey":"cadaver_synod","internalLabel":"Cadaver Synod","role":"regular","questionId":"63a4747f-a49d-47e4-a5de-744203039542","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":3,"contentKey":"great_stork_derby","internalLabel":"Great Stork Derby","role":"team","questionId":"0064770a-6e6c-4de8-9231-568e197e2dcd","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":4,"contentKey":"roland_the_farter","internalLabel":"Roland the Farter","role":"regular","questionId":"1c8b89e8-bee7-431d-a56a-c01a0acb8b14","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":5,"contentKey":"radithor","internalLabel":"Eben Byers / Radithor","role":"regular","questionId":"f95649f9-29fc-4e87-be87-ba414a5e22f8","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":6,"contentKey":"therese_humbert","internalLabel":"Thérèse Humbert — fake inheritance","role":"regular","questionId":"169ab247-1b0f-4707-88a0-3c6d5aaf879b","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":7,"contentKey":"poyais","internalLabel":"Poyais","role":"last","questionId":"704e2046-6bd6-40e1-91e9-08980f6e16d1","wordingStatus":"production_verified_v2_2","scoreControl":"manual"},
+        {"order":8,"contentKey":"brinkley_goat_glands_abc","internalLabel":"John Brinkley — delayed A/B/C","role":"final_abc","questionId":"1a5362e8-5b49-477b-a292-7bb89f7ede94","wordingStatus":"production_verified_v2_2","scoreControl":"manual","legacyRoleExplicitlyRejected":"double_or_nothing"}
       ]
     }
   ]
