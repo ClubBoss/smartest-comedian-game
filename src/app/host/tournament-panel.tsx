@@ -163,7 +163,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
     ? qualifierResolution.automaticQualifierIds
     : [];
   const hasCutoffTie = Boolean(qualifierResolution?.tieBreakPlayerIds.length);
-  const transitionBlocked = Boolean(lobby.question || lobby.buzz);
+  const transitionBlocked = Boolean(lobby.question || lobby.buzz?.status === "open");
 
   function toggleAdvancer(playerId: string) {
     setAdvanceArmed(false);
@@ -231,7 +231,7 @@ export function TournamentPanel({ lobby, hostToken, onRefresh, gameMode }: Props
               <button className="secondary" onClick={() => { setSelectedAdvancers(clearSuggestedIds); setAdvanceArmed(false); }}>Select current top 2</button>
             </div>
           )}
-          {transitionBlocked ? <p className="warning">Finish the current question and buzzer cycle before changing tournament stage.</p> : null}
+          {transitionBlocked ? <p className="warning">Finish the current question and any open buzzer cycle before changing tournament stage.</p> : null}
           <button
             className={advanceArmed ? "danger" : "primary"}
             disabled={busy || selectedAdvancers.length !== 2 || transitionBlocked}
