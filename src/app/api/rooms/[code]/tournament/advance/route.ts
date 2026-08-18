@@ -26,6 +26,19 @@ export async function POST(
     return Response.json({ error: "Choose exactly two advancing players from the active qualifier." }, { status: 400 });
   }
 
+  const { data: liveRoom, error: roomStateError } = await auth.supabase
+    .from("rooms")
+    .select("current_question_session_id, active_buzz_cycle_id")
+    .eq("id", auth.room.id)
+    .maybeSingle();
+  if (roomStateError) {
+    console.error("Tournament transition room-state lookup failed", roomStateError);
+    return Response.json({ error: "Could not verify current game state." }, { status: 500 });
+  }
+  if (liveRoom?.current_question_session_id || liveRoom?.active_buzz_cycle_id) {
+    return Response.json({ error: "Finish the current question and buzzer cycle before changing tournament stage." }, { status: 409 });
+  }
+
   const { data: tournament, error: lookupError } = await auth.supabase
     .from("tournament_nights")
     .select("id")
