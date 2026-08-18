@@ -78,12 +78,22 @@ declare
   v_position integer;
   v_item record;
   v_count integer := 0;
+  v_current_session uuid;
 begin
-  perform 1 from public.rooms r
+  select r.current_question_session_id
+    into v_current_session
+  from public.rooms r
   where r.id = p_room_id and r.ended_at is null
   for update;
   if not found then
     raise exception using errcode = 'P0001', message = 'ERR_ROOM_NOT_FOUND';
+  end if;
+
+  if v_current_session is not null and exists (
+    select 1 from public.question_sessions s
+    where s.id = v_current_session and s.ended_at is null
+  ) then
+    raise exception using errcode = 'P0001', message = 'ERR_QUESTION_ACTIVE';
   end if;
 
   if not exists (select 1 from public.question_packs p where p.id = p_pack_id) then
@@ -98,6 +108,10 @@ begin
   ) then
     raise exception using errcode = 'P0001', message = 'ERR_QUESTION_NOT_READY';
   end if;
+
+  update public.room_question_queue
+  set state = 'skipped'
+  where room_id = p_room_id and state = 'queued';
 
   select coalesce(max(position), -1) + 1 into v_position
   from public.room_question_queue
