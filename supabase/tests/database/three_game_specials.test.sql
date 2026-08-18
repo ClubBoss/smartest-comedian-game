@@ -1,6 +1,6 @@
 begin;
 
-select plan(13);
+select plan(15);
 
 select has_column('public', 'room_question_queue', 'question_role', 'queued questions keep their game role');
 select has_column('public', 'question_sessions', 'question_role_snapshot', 'live questions snapshot their game role');
@@ -43,6 +43,28 @@ select is(
   ),
   array['regular','regular','team','regular','regular','regular','last','tiebreak','double_or_nothing']::text[],
   'Final roles are stored in the intended running order'
+);
+
+insert into rooms (code, host_secret_hash, capacity) values ('PACKREPL', 'hash', 4);
+select queue_question_atomic(
+  (select id from rooms where code = 'PACKREPL'),
+  '10000000-0000-4000-8000-000000000001'::uuid
+);
+select queue_question_pack_with_roles_atomic(
+  (select id from rooms where code = 'PACKREPL'),
+  '90000000-0000-4000-8000-000000000001'::uuid
+);
+
+select is(
+  (select count(*) from room_question_queue where room_id = (select id from rooms where code = 'PACKREPL') and state = 'skipped'),
+  1::bigint,
+  'loading a game skips any older pending queue item'
+);
+
+select is(
+  (select count(*) from room_question_queue where room_id = (select id from rooms where code = 'PACKREPL') and state = 'queued'),
+  6::bigint,
+  'loading a game leaves only that game pending'
 );
 
 insert into rooms (code, host_secret_hash, capacity) values ('PACKROLE', 'hash', 4);
