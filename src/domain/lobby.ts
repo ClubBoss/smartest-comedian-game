@@ -43,8 +43,6 @@ export type PublicQuestionState = {
   answer: string | null;
   explanation: string | null;
   role: QuestionRole;
-  correctPoints: number | null;
-  wrongPoints: number | null;
 };
 
 export type TournamentStage = "qualifier_a" | "qualifier_b" | "final" | "complete";
@@ -66,10 +64,6 @@ export type TournamentPublicState = {
   teamBonus: number;
   currentPrize: number;
   championPlayerId: string | null;
-  finalPayout: number | null;
-  doubleResolved: boolean;
-  doubleAttempted: boolean;
-  doubleCorrect: boolean | null;
   activePlayerIds: string[];
   members: TournamentMemberState[];
 };
