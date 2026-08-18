@@ -56,7 +56,7 @@ export async function GET(
       .eq("room_id", room.id),
     supabase
       .from("tournament_nights")
-      .select("id, format, current_stage, status, base_prize, team_bonus, champion_player_id")
+      .select("id, format, current_stage, status, base_prize, team_bonus, champion_player_id, final_payout, double_attempted, double_correct")
       .eq("room_id", room.id)
       .maybeSingle(),
   ]);
@@ -132,6 +132,9 @@ export async function GET(
       teamBonus: tournament.team_bonus,
       currentPrize: tournament.base_prize + tournament.team_bonus,
       championPlayerId: tournament.champion_player_id,
+      finalPayout: tournament.final_payout,
+      doubleAttempted: tournament.double_attempted,
+      doubleCorrect: tournament.double_correct,
       activePlayerIds,
       members,
     };
@@ -182,7 +185,7 @@ export async function GET(
   if (room.current_question_session_id) {
     const { data: session, error: sessionError } = await supabase
       .from("question_sessions")
-      .select("id, prompt_snapshot, answer_snapshot, explanation_snapshot, hints_snapshot, assets_snapshot, stimulus_revealed, revealed_hint_count, answer_revealed, ended_at")
+      .select("id, prompt_snapshot, answer_snapshot, explanation_snapshot, hints_snapshot, assets_snapshot, stimulus_revealed, revealed_hint_count, answer_revealed, ended_at, tournament_stage_snapshot, question_role_snapshot, correct_points_snapshot, wrong_points_snapshot, hint_point_schedule_snapshot")
       .eq("id", room.current_question_session_id)
       .maybeSingle();
     if (sessionError) {
@@ -215,18 +218,25 @@ export async function GET(
           url,
         };
       }));
+      const hintPointSchedule = Array.isArray(session.hint_point_schedule_snapshot)
+        ? session.hint_point_schedule_snapshot.filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+        : [];
 
       question = {
         sessionId: session.id,
         stimulusRevealed: session.stimulus_revealed,
         prompt: session.stimulus_revealed ? session.prompt_snapshot : null,
         assets,
-        revealedHints: session.stimulus_revealed
-          ? allHints.slice(0, session.revealed_hint_count)
-          : [],
+        revealedHints: session.stimulus_revealed ? allHints.slice(0, session.revealed_hint_count) : [],
+        revealedHintCount: session.revealed_hint_count,
         answerRevealed: session.answer_revealed,
         answer: session.answer_revealed ? session.answer_snapshot : null,
         explanation: session.answer_revealed ? session.explanation_snapshot : null,
+        tournamentStage: session.tournament_stage_snapshot,
+        tournamentRole: session.question_role_snapshot ?? "regular",
+        correctPoints: session.correct_points_snapshot,
+        wrongPoints: session.wrong_points_snapshot,
+        hintPointSchedule,
       };
     }
   }
