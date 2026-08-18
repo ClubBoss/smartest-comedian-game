@@ -60,9 +60,6 @@ export type TournamentPublicState = {
   format: "league_8_v1";
   currentStage: TournamentStage;
   status: "active" | "completed";
-  basePrize: number;
-  teamBonus: number;
-  currentPrize: number;
   championPlayerId: string | null;
   activePlayerIds: string[];
   members: TournamentMemberState[];
