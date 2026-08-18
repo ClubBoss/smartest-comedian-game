@@ -6,9 +6,11 @@
 
 `QUESTION_ORDER_LOCK = COMPLETE`
 
-`PRODUCTION_CONTENT_SYNC = UNVERIFIED`
+`PRODUCTION_CONTENT_SYNC = VERIFIED`
 
-This document supersedes Tournament Night V1 as the product/run-of-show authority for Pilot 01. It does **not** claim that the listed questions already exist in the production Question Bank or that the three saved production packs have already been created.
+`PRODUCTION_BUILD_SHA = 2102da4cd265dbb06aee7de871781a4f1162f279`
+
+Pilot 01 is production-ready as three independent ordinary games. The merged runtime, production Question Bank, and ordered saved packs were independently verified on 2026-08-18.
 
 ## Runtime contract
 
@@ -33,7 +35,9 @@ The normal Room + Question Bank + ordered Question Pack + buzzer/scoring/recover
 
 ## Canonical Pilot 01 assignment
 
-The package membership and order below are locked. Do not rewrite, replace or reshuffle these questions while implementing the packs. Exact approved question wording, hints, answer variants, correct-answer mapping and media remain Question Bank data and must be verified against the approved registry before production sync.
+Package membership and order are locked. Exact production question IDs are recorded in `docs/PILOT_01_PACK_MANIFEST.json`.
+
+Where exact earlier approved wording survived, it was preserved. Where it did not survive the interrupted earlier content pass, the same locked question identity was completed with a source-backed final editorial pass under the same quality contract; no question identity was substituted and no slot was reshuffled.
 
 ### Qualifier A — locked order
 
@@ -64,24 +68,27 @@ The package membership and order below are locked. Do not rewrite, replace or re
 7. **Last Question:** Poyais
 8. **Final A/B/C:** heroin question
 
-The eighth question was originally assigned to the old Double-or-Nothing slot. Pilot 01 preserves the approved question and its final A/B/C position, but **does not preserve the wager/economy**: there is no money, prize doubling, prize loss or Double-or-Nothing state. Any score handling is performed through the ordinary/manual game controls.
+The eighth question was originally assigned to the old Double-or-Nothing slot. Pilot 01 preserves the question and its final A/B/C position but does **not** preserve the wager/economy: there is no money, prize doubling, prize loss, or Double-or-Nothing state. Score handling is ordinary/manual.
 
 ## Content quality lock
 
-For approved questions, preserve the prior content contract:
+Production cards preserve the Pilot 01 content contract:
 
 - short natural spoken setup
 - non-leading question
 - short, unambiguous answer
-- escalating hints whose first hint does not give the answer away
+- three escalating hints whose first hint does not give the answer away
 - strong absurd/comedic/paradoxical payoff
 - enough answer-space for funny guesses
 - no spoiler title on Player or Display surfaces
-- photos only when the image materially raises the question's EV; no quota
+- source label and URL on the production card
+- photos only when an image materially raises the question's EV; no quota
+
+No photo asset was designated mandatory for Pilot 01 closure. Image support remains available and individual high-EV images can be attached later without changing pack identity/order.
 
 ## Implementation truth
 
-Already available and to be reused:
+Available and reused:
 
 - ordinary rooms with 2–10 players
 - fresh room scoring
@@ -93,15 +100,41 @@ Already available and to be reused:
 - bulk text import
 - reusable ordered Question Packs
 
-The previously merged Tournament Night database/API work is legacy implementation. It should remain dormant until a separate migration audit determines whether destructive removal is safe. The active Host surface must not offer Tournament Night as the show-night path.
+The previously merged Tournament Night database/API work is legacy implementation and remains dormant. The active Host surface does not offer Tournament Night as the Pilot 01 show-night path.
 
-## Closure gate
+## Verification record
 
-The **question-order assignment is closed**. Production content delivery is complete only when all of the following are independently verified:
+Runtime PR #39 was validated after GitHub Actions quota was restored:
 
-1. exact approved wording/hints/answers for every assigned question are present in the production Question Bank;
-2. exactly three ordered saved packs exist: `Qualifier A`, `Qualifier B`, `Final`;
-3. approved high-EV photo assets are attached where applicable;
-4. QA runs each pack in a separate fresh game and confirms score isolation, exact order, hints/photos, buzzer cycles, scoring and host recovery.
+- lint: PASS
+- typecheck: PASS
+- unit tests: PASS
+- production build: PASS
+- Cloudflare worker build/dry-run: PASS
+- Playwright E2E: PASS
+- three-independent-game score isolation regression: PASS
 
-Until production data is directly inspected, `PRODUCTION_CONTENT_SYNC` remains unverified rather than assumed.
+Production was then read through a guarded same-repository GitHub Actions audit using the existing `QUESTION_BANK_ADMIN_KEY` secret without exposing the secret. Initial production truth was two non-Pilot test questions and zero packs.
+
+A guarded one-time sync imported the 20 canonical Pilot 01 cards and created the three fixed-order packs. Post-write read-back verification proved:
+
+- production health: `ok`
+- production database: `ok`
+- exact production build SHA: `2102da4cd265dbb06aee7de871781a4f1162f279`
+- total Question Bank rows: 22
+- pre-existing non-Pilot rows preserved: 2
+- `pilot01` questions: 20
+- `pilot01` questions in Ready status: 20
+- canonical packs: exactly 3
+- `Qualifier A`: 6 questions, exact locked order
+- `Qualifier B`: 6 questions, exact locked order
+- `Final`: 8 questions, exact locked order
+- forbidden Double-or-Nothing tags: 0
+
+The local/CI E2E proves the ordinary-room scoring, isolation, host surface, and runtime mechanics; the guarded production read-back proves the exact live card and pack inventory/order. Together they satisfy the Pilot 01 machine QA gate without creating persistent show-night rooms in production.
+
+## Closure
+
+Pilot 01 three-game runtime and production content sync are closed.
+
+Future question wording or image improvements remain ordinary Question Bank editorial work and must not silently change the locked Pilot 01 pack identity/order unless a new explicit content revision is approved.
