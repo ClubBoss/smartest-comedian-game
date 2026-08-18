@@ -10,7 +10,7 @@ const ROLE_OPTIONS = [
   { value: "qualifier_super", label: "Супер-вопрос · +3", help: "Сложный вопрос в конце Игры 1 или Игры 2. При правильном ответе ведущий просто нажимает +1 три раза." },
   { value: "team", label: "Командный вопрос", help: "Игроки совещаются и дают один общий ответ. Личные очки не меняются." },
   { value: "last", label: "Последний вопрос · +2", help: "Последний соревновательный вопрос Финала. При правильном ответе ведущий нажимает +1 два раза." },
-  { value: "double_or_nothing", label: "Суперфинал · A/B/C", help: "Отдельный финальный вопрос только для победителя. Три варианта ответа, без buzzer. Все условия приза ведущий проговаривает устно." },
+  { value: "double_or_nothing", label: "Суперфинал · A/B/C", help: "Отдельный финальный вопрос только для победителя. Три варианта ответа, без buzzer. Дополнительные условия ведущий проговаривает сам." },
   { value: "tiebreak", label: "Тай-брейк", help: "Резервный вопрос только если нужно разрулить ничью." },
 ] as const;
 
@@ -184,7 +184,7 @@ export function QuestionPacks() {
         <section className="card stack">
           <div><p className="eyebrow">{packId ? "Редактирование" : "Новый набор"}</p><h2>{name || "Без названия"}</h2></div>
           <label className="field"><span>Название</span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Например: Игра 1 · Пилот" /></label>
-          <label className="field"><span>Заметка для ведущего</span><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Например: первая квалификационная игра, 5 обычных + супер-вопрос" /></label>
+          <label className="field"><span>Заметка для ведущего</span><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Например: Игра 1 — 5 обычных вопросов и супер-вопрос" /></label>
 
           <div className="question-picker-row">
             <select value={addQuestionId} onChange={(event) => setAddQuestionId(event.target.value)}>
