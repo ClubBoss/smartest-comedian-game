@@ -2,6 +2,8 @@
   max-width: 1100px;
   margin: 16px auto 0;
   padding: 0 20px;
+  display: grid;
+  gap: 12px;
 }
 
 .tournament-group-picker {
@@ -49,6 +51,23 @@
 .warning { margin: 0; border-radius: 12px; background: #fff3cd; padding: 12px 14px; line-height: 1.4; }
 .danger { min-height: 46px; border-radius: 12px; border: 1px solid #7a1515; background: #a51d1d; color: #fff; padding: 10px 16px; font-weight: 800; }
 
+.tournament-special-panel {
+  border: 2px solid #171717;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .08);
+}
+
+.tournament-special-answer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #dedede;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+.tournament-special-answer p { margin: 4px 0 0; }
+
 .tournament-player-banner {
   border-radius: 16px;
   padding: 14px 16px;
@@ -62,6 +81,19 @@
 .tournament-player-banner.spectator { border-color: #c9c9c9; background: #eee; color: #555; }
 .tournament-player-banner.active { background: #171717; color: #fff; }
 
+.player-special-answer-dock {
+  position: fixed;
+  z-index: 50;
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(620px, calc(100vw - 24px));
+  transform: translateX(-50%);
+}
+.player-special-answer-dock .card {
+  border: 2px solid #171717;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, .18);
+}
+
 .display-tournament-prize { margin: 8px 0; font-size: clamp(18px, 2vw, 28px); }
 
 @media (max-width: 720px) {
@@ -69,4 +101,7 @@
   .tournament-player-pick,
   .tournament-standing-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .tournament-standing-row .status-pill { grid-column: 2 / -1; justify-self: start; }
+  .tournament-special-answer { grid-template-columns: 1fr; }
+  .tournament-special-answer .mini-actions { justify-content: stretch; }
+  .player-special-answer-dock { bottom: max(8px, env(safe-area-inset-bottom)); width: calc(100vw - 16px); }
 }
