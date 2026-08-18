@@ -6,18 +6,18 @@ import { FormEvent, useEffect, useState } from "react";
 const ADMIN_KEY_STORAGE = "smartest-question-bank-admin-key";
 
 const ROLE_OPTIONS = [
-  { value: "regular", label: "Обычный вопрос", help: "Стандартный вопрос: обычно +1 / 0 / -1." },
-  { value: "qualifier_super", label: "Супер-вопрос · +3", help: "Сложный вопрос в конце Игры 1 или Игры 2. Правильный ответ = +3, ошибка = 0." },
-  { value: "team", label: "Командный вопрос", help: "Финалисты совещаются вместе. Правильный ответ увеличивает приз с 10 до 12 AZN." },
-  { value: "last", label: "Последний вопрос · +2", help: "Последний соревновательный вопрос финала. Правильный ответ = +2." },
-  { value: "double_or_nothing", label: "Удвоение приза", help: "Финальный A/B/C вопрос только для победителя. Обычный buzzer не используется." },
+  { value: "regular", label: "Обычный вопрос", help: "Стандартный вопрос. Счёт ведётся обычными кнопками ведущего." },
+  { value: "qualifier_super", label: "Супер-вопрос · +3", help: "Сложный вопрос в конце Игры 1 или Игры 2. При правильном ответе ведущий просто нажимает +1 три раза." },
+  { value: "team", label: "Командный вопрос", help: "Игроки совещаются и дают один общий ответ. Личные очки не меняются." },
+  { value: "last", label: "Последний вопрос · +2", help: "Последний соревновательный вопрос Финала. При правильном ответе ведущий нажимает +1 два раза." },
+  { value: "double_or_nothing", label: "Суперфинал · A/B/C", help: "Отдельный финальный вопрос только для победителя. Три варианта ответа, без buzzer. Все условия приза ведущий проговаривает устно." },
   { value: "tiebreak", label: "Тай-брейк", help: "Резервный вопрос только если нужно разрулить ничью." },
 ] as const;
 
 type QuestionRole = (typeof ROLE_OPTIONS)[number]["value"];
 type QuestionRef = { id: string; prompt: string | null; category: string | null; status: string };
 type PackItem = { questionId: string; role: QuestionRole };
-type LoadedPackItem = PackItem & { correctPoints: number | null; wrongPoints: number | null; question: QuestionRef };
+type LoadedPackItem = PackItem & { question: QuestionRef };
 type Pack = { id: string; name: string; description: string | null; questionIds: string[]; questions: QuestionRef[]; items?: LoadedPackItem[] };
 type PackPayload = { packs: Pack[]; questions: QuestionRef[]; readyQuestions: QuestionRef[] };
 
