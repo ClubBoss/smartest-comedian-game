@@ -1,0 +1,72 @@
+.host-tournament-dock {
+  max-width: 1100px;
+  margin: 16px auto 0;
+  padding: 0 20px;
+}
+
+.tournament-group-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tournament-player-pick,
+.tournament-standing-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d8d8d8;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.tournament-player-pick.group-a { border-left: 5px solid #171717; }
+.tournament-player-pick.group-b { border-left: 5px solid #9a9a9a; }
+.tournament-player-pick span { font-weight: 900; }
+
+.compact-card { padding: 14px; }
+.compact-card strong { line-height: 1.45; }
+
+.tournament-live-panel { border-width: 2px; }
+.tournament-prize-badge {
+  min-width: 110px;
+  text-align: center;
+  border-radius: 14px;
+  background: #171717;
+  color: #fff;
+  padding: 10px 14px;
+}
+.tournament-prize-badge span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+.tournament-prize-badge strong { display: block; margin-top: 3px; font-size: 24px; }
+
+.tournament-standings { display: grid; gap: 8px; }
+.tournament-standing-row { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.tournament-standing-row input,
+.tournament-player-pick input { width: 20px; height: 20px; }
+.tournament-advance-box { border-top: 1px solid #e5e5e5; padding-top: 14px; }
+.warning { margin: 0; border-radius: 12px; background: #fff3cd; padding: 12px 14px; line-height: 1.4; }
+.danger { min-height: 46px; border-radius: 12px; border: 1px solid #7a1515; background: #a51d1d; color: #fff; padding: 10px 16px; font-weight: 800; }
+
+.tournament-player-banner {
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 4px;
+  text-align: center;
+  border: 2px solid #171717;
+}
+.tournament-player-banner span { font-size: 11px; font-weight: 900; letter-spacing: .12em; }
+.tournament-player-banner strong { font-size: 20px; }
+.tournament-player-banner.spectator { border-color: #c9c9c9; background: #eee; color: #555; }
+.tournament-player-banner.active { background: #171717; color: #fff; }
+
+.display-tournament-prize { margin: 8px 0; font-size: clamp(18px, 2vw, 28px); }
+
+@media (max-width: 720px) {
+  .tournament-group-picker { grid-template-columns: 1fr; }
+  .tournament-player-pick,
+  .tournament-standing-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .tournament-standing-row .status-pill { grid-column: 2 / -1; justify-self: start; }
+}
