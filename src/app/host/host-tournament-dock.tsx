@@ -3,6 +3,7 @@
 import { useRoomState } from "@/hooks/use-room-state";
 import { useEffect, useState } from "react";
 import { TournamentPanel } from "./tournament-panel";
+import { TournamentSpecialPanel } from "./tournament-special-panel";
 
 const CURRENT_ROOM_KEY = "smartest-host-current-room";
 
@@ -27,6 +28,7 @@ export function HostTournamentDock() {
   return (
     <div className="host-tournament-dock">
       <TournamentPanel lobby={lobby} hostToken={hostToken} onRefresh={refresh} gameMode={false} />
+      <TournamentSpecialPanel lobby={lobby} hostToken={hostToken} onRefresh={refresh} />
     </div>
   );
 }
