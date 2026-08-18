@@ -27,7 +27,7 @@ test("host can create a new room without losing the previous room", async ({ pag
   expect(secondCode).not.toBe(firstCode);
 
   const roomsPanel = page.locator("details").filter({ hasText: /^Rooms/ });
-  if (!(await roomsPanel.getAttribute("open"))) {
+  if ((await roomsPanel.getAttribute("open")) === null) {
     await roomsPanel.locator("summary").click();
   }
   await expect(roomsPanel).toHaveAttribute("open", "");
