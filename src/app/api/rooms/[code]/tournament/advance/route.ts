@@ -60,14 +60,13 @@ export async function POST(
     .eq("id", body.tournamentId)
     .eq("room_id", auth.room.id)
     .maybeSingle();
-
   if (lookupError) {
     console.error("Tournament ownership lookup failed", lookupError);
     return Response.json({ error: "Could not verify Tournament Night." }, { status: 500 });
   }
   if (!tournament) return Response.json({ error: "Tournament Night not found for this room." }, { status: 404 });
 
-  const { data, error } = await auth.supabase.rpc("complete_league_qualifier_atomic", {
+  const { data, error } = await auth.supabase.rpc("advance_league_8_tournament_with_pack_atomic", {
     p_tournament_id: tournament.id,
     p_stage: body.stage,
     p_advancing_player_ids: body.advancingPlayerIds as string[],
@@ -82,7 +81,9 @@ export async function POST(
           ? "Final Four cannot start until two players qualify from each group."
           : error.message.includes("ERR_QUALIFIER_REQUIRES_TWO")
             ? "Exactly two players must advance."
-            : null;
+            : error.message.includes("ERR_TOURNAMENT_PACK") || error.message.includes("ERR_QUESTION_NOT_READY")
+              ? "The next stage pack is missing or no longer valid. Fix it in Question Bank before continuing."
+              : null;
     if (message) return Response.json({ error: message }, { status: 409 });
     console.error("Tournament qualifier transition failed", error);
     return Response.json({ error: "Could not advance Tournament Night." }, { status: 500 });
