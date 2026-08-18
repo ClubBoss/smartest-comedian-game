@@ -60,7 +60,7 @@ export async function GET(
       .order("updated_at", { ascending: false }),
     auth.supabase
       .from("room_question_queue")
-      .select("id, question_id, position, state")
+      .select("id, question_id, position, state, question_role, correct_points, wrong_points")
       .eq("room_id", auth.room.id)
       .order("position", { ascending: true }),
   ]);
@@ -91,7 +91,7 @@ export async function GET(
   if (room.current_question_session_id) {
     const { data: session, error: sessionError } = await auth.supabase
       .from("question_sessions")
-      .select("id, source_question_id, queue_item_id, prompt_snapshot, answer_snapshot, answer_variants_snapshot, explanation_snapshot, host_notes_snapshot, hints_snapshot, assets_snapshot, stimulus_revealed, revealed_hint_count, answer_revealed, started_at, ended_at")
+      .select("id, source_question_id, queue_item_id, prompt_snapshot, answer_snapshot, answer_variants_snapshot, explanation_snapshot, host_notes_snapshot, hints_snapshot, assets_snapshot, stimulus_revealed, revealed_hint_count, answer_revealed, started_at, ended_at, question_role_snapshot, correct_points_snapshot, wrong_points_snapshot")
       .eq("id", room.current_question_session_id)
       .maybeSingle();
 
@@ -119,6 +119,9 @@ export async function GET(
         revealedHintCount: session.revealed_hint_count,
         answerRevealed: session.answer_revealed,
         startedAt: session.started_at,
+        role: session.question_role_snapshot ?? "regular",
+        correctPoints: session.correct_points_snapshot,
+        wrongPoints: session.wrong_points_snapshot,
       };
     }
   }
@@ -139,6 +142,9 @@ export async function GET(
         state: item.state,
         prompt: meta?.prompt ?? "Unavailable question",
         category: meta?.category ?? null,
+        role: item.question_role ?? "regular",
+        correctPoints: item.correct_points,
+        wrongPoints: item.wrong_points,
       };
     }),
     current,
