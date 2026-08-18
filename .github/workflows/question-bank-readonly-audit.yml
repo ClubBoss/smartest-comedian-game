@@ -58,21 +58,13 @@ jobs:
           if (questions.length !== expected.length) throw new Error(`Expected 20 questions, got ${questions.length}`);
           questions.forEach((q, index) => {
             const [pack, key, role] = expected[index];
-            if (q.pack !== pack || q.contentKey !== key || q.role !== role) {
-              throw new Error(`Canonical slot mismatch at ${index + 1}: expected ${pack}/${key}/${role}`);
-            }
+            if (q.pack !== pack || q.contentKey !== key || q.role !== role) throw new Error(`Canonical slot mismatch at ${index + 1}: expected ${pack}/${key}/${role}`);
             if (q.status !== 'ready') throw new Error(`${key}: status must be ready`);
             if (!q.prompt?.trim() || !q.answer?.trim()) throw new Error(`${key}: prompt/answer required`);
-            if (!Array.isArray(q.hints) || q.hints.length !== 3 || q.hints.some((v) => !String(v).trim())) {
-              throw new Error(`${key}: exactly three non-empty hints required`);
-            }
+            if (!Array.isArray(q.hints) || q.hints.length !== 3 || q.hints.some((v) => !String(v).trim())) throw new Error(`${key}: exactly three non-empty hints required`);
             const tags = q.tags ?? [];
-            if (!tags.includes('pilot01') || !tags.includes(`content:${key}`) || !tags.includes(`role:${role}`)) {
-              throw new Error(`${key}: canonical tags missing`);
-            }
-            if (tags.some((tag) => String(tag).toLowerCase().includes('double_or_nothing'))) {
-              throw new Error(`${key}: forbidden Double-or-Nothing tag`);
-            }
+            if (!tags.includes('pilot01') || !tags.includes(`content:${key}`) || !tags.includes(`role:${role}`)) throw new Error(`${key}: canonical tags missing`);
+            if (tags.some((tag) => String(tag).toLowerCase().includes('double_or_nothing'))) throw new Error(`${key}: forbidden Double-or-Nothing tag`);
           });
           const counts = Object.fromEntries(['Qualifier A', 'Qualifier B', 'Final'].map((name) => [name, questions.filter((q) => q.pack === name).length]));
           if (counts['Qualifier A'] !== 6 || counts['Qualifier B'] !== 6 || counts.Final !== 8) throw new Error(`Pack counts invalid: ${JSON.stringify(counts)}`);
@@ -83,8 +75,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const fs = require('node:fs');
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
           const base = process.env.LIVE_URL;
           const key = process.env.QUESTION_BANK_ADMIN_KEY;
           const expectedSha = process.env.EXPECTED_PROD_SHA;
@@ -109,11 +101,9 @@ jobs:
             const tag = (question.tags ?? []).find((value) => String(value).startsWith('content:'));
             return tag ? String(tag).slice('content:'.length) : null;
           }
-
           function pilotQuestions(payload) {
             return (payload.questions ?? []).filter((q) => (q.tags ?? []).includes('pilot01'));
           }
-
           function assertPilotSet(records, phase) {
             if (records.length !== 20) throw new Error(`${phase}: expected exactly 20 pilot01 questions, got ${records.length}`);
             const byKey = new Map();
@@ -150,9 +140,7 @@ jobs:
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({ questions: cleanQuestions }),
             });
-            if (importResult.count !== 20 || !Array.isArray(importResult.ids) || importResult.ids.length !== 20) {
-              throw new Error(`Import returned unexpected result: ${JSON.stringify(importResult)}`);
-            }
+            if (importResult.count !== 20 || !Array.isArray(importResult.ids) || importResult.ids.length !== 20) throw new Error(`Import returned unexpected result: ${JSON.stringify(importResult)}`);
             imported = true;
             const afterImport = await request('/api/questions');
             byKey = assertPilotSet(pilotQuestions(afterImport), 'post-import');
@@ -175,9 +163,7 @@ jobs:
             if (matches.length > 1) throw new Error(`Duplicate production pack name: ${desired.name}`);
             if (matches.length === 1) {
               const existing = matches[0];
-              if (JSON.stringify(existing.questionIds ?? []) !== JSON.stringify(desired.questionIds)) {
-                throw new Error(`Existing ${desired.name} has wrong question order; refusing overwrite`);
-              }
+              if (JSON.stringify(existing.questionIds ?? []) !== JSON.stringify(desired.questionIds)) throw new Error(`Existing ${desired.name} has wrong question order; refusing overwrite`);
               console.log(`${desired.name}: already correct; no write.`);
               continue;
             }
@@ -191,16 +177,12 @@ jobs:
           }
 
           const healthAfter = await request('/api/health');
-          if (healthAfter.ok !== true || healthAfter.database !== 'ok' || healthAfter.buildSha !== expectedSha) {
-            throw new Error(`Post-sync health/SHA mismatch: ${JSON.stringify(healthAfter)}`);
-          }
+          if (healthAfter.ok !== true || healthAfter.database !== 'ok' || healthAfter.buildSha !== expectedSha) throw new Error(`Post-sync health/SHA mismatch: ${JSON.stringify(healthAfter)}`);
           const questionsAfter = await request('/api/questions');
           const packsAfter = await request('/api/question-packs');
           const pilotAfter = pilotQuestions(questionsAfter);
           const verifiedByKey = assertPilotSet(pilotAfter, 'final');
-          for (const oldId of nonPilotIdsBefore) {
-            if (!(questionsAfter.questions ?? []).some((q) => q.id === oldId)) throw new Error(`Pre-existing non-pilot question disappeared: ${oldId}`);
-          }
+          for (const oldId of nonPilotIdsBefore) if (!(questionsAfter.questions ?? []).some((q) => q.id === oldId)) throw new Error(`Pre-existing non-pilot question disappeared: ${oldId}`);
 
           const canonicalAfter = (packsAfter.packs ?? []).filter((p) => canonicalPackNames.includes(p.name));
           if (canonicalAfter.length !== 3) throw new Error(`Expected exactly 3 canonical packs, got ${canonicalAfter.length}`);
@@ -209,13 +191,8 @@ jobs:
             const matches = canonicalAfter.filter((p) => p.name === desired.name);
             if (matches.length !== 1) throw new Error(`Expected exactly one ${desired.name}, got ${matches.length}`);
             if (JSON.stringify(matches[0].questionIds ?? []) !== JSON.stringify(desired.questionIds)) throw new Error(`${desired.name}: final order mismatch`);
-            summaryPacks.push({
-              name: desired.name,
-              count: desired.questionIds.length,
-              contentKeys: sourceQuestions.filter((q) => q.pack === desired.name).map((q) => q.contentKey),
-            });
+            summaryPacks.push({ name: desired.name, count: desired.questionIds.length, contentKeys: sourceQuestions.filter((q) => q.pack === desired.name).map((q) => q.contentKey) });
           }
-
           const forbidden = pilotAfter.filter((q) => (q.tags ?? []).some((tag) => String(tag).toLowerCase().includes('double_or_nothing')));
           if (forbidden.length) throw new Error(`Forbidden Double-or-Nothing tags remain on ${forbidden.length} questions`);
 
