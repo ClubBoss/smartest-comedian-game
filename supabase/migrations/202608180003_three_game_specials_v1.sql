@@ -167,8 +167,8 @@ begin
   end if;
 
   if (
-    select count(distinct item->>'questionId')
-    from jsonb_array_elements(p_items) item
+    select count(distinct item.value->>'questionId')
+    from jsonb_array_elements(p_items) as item(value)
   ) <> v_count then
     raise exception using errcode = 'P0001', message = 'ERR_PACK_DUPLICATE_QUESTION';
   end if;
