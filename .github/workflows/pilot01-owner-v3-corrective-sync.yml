@@ -1,0 +1,92 @@
+name: Pilot 01 Owner V3 Corrective Identity Sync
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pilot01-owner-v3-corrective-sync.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LIVE_URL: https://smartest-comedian-game.blufferus.workers.dev
+      QUESTION_BANK_ADMIN_KEY: ${{ secrets.QUESTION_BANK_ADMIN_KEY }}
+
+    steps:
+      - name: Checkout exact corrective head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Compose interim and corrected targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${QUESTION_BANK_ADMIN_KEY:-}" || { echo "QUESTION_BANK_ADMIN_KEY unavailable" >&2; exit 1; }
+          git fetch --no-tags origin main
+          LIVE_MAIN_SHA="$(git rev-parse FETCH_HEAD)"
+          PATCH_MAIN_SHA="$(node -p "require('./ops/PILOT_01_OWNER_V3_PRODUCTION_PATCH.json').expectedMainSha")"
+          test "${LIVE_MAIN_SHA}" = "${PATCH_MAIN_SHA}" || { echo "origin/main drift: expected ${PATCH_MAIN_SHA}, got ${LIVE_MAIN_SHA}" >&2; exit 1; }
+          git fetch --no-tags origin docs/pilot01-v2-4-production-closure
+          git show FETCH_HEAD:docs/PILOT_01_PRODUCTION_CONTENT.json > /tmp/pilot01-v24-production.json
+
+          node <<'NODE'
+          const fs=require('node:fs'); const crypto=require('node:crypto');
+          const base=JSON.parse(fs.readFileSync('/tmp/pilot01-v24-production.json','utf8'));
+          const owner=JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_PRODUCTION_PATCH.json','utf8'));
+          const roles=JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_ROLE_PATCH.json','utf8'));
+          const corrective=JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_CORRECTIVE_IDENTITY_PATCH.json','utf8'));
+          if(base.revision!=='difficulty_v2_4'||base.status!=='production_verified') throw new Error('Unexpected V2.4 base');
+          if(base.productionBuildSha!==owner.expectedProductionBuildSha||base.targetSha256!==owner.expectedBaseTargetSha256) throw new Error('Base authority mismatch');
+
+          function apply(baseQuestions,changes,roleOverrides={}){
+            const byId=new Map(baseQuestions.map(q=>[q.questionId,structuredClone(q)]));
+            const controls=new Set(['slot','questionId']);
+            for(const raw of changes){const q=byId.get(raw.questionId); if(!q) throw new Error(`Unknown ${raw.questionId}`); for(const [k,v] of Object.entries(raw)) if(!controls.has(k)) q[k]=v;}
+            for(const [id,role] of Object.entries(roleOverrides)){const q=byId.get(id); if(!q) throw new Error(`Unknown role UUID ${id}`); q.role=role;}
+            return baseQuestions.map(orig=>{const q=byId.get(orig.questionId); const tags=(q.tags??[]).map(String).filter(t=>!t.startsWith('content:')&&!t.startsWith('role:')); q.tags=[...new Set([...tags,`content:${q.contentKey}`,`role:${q.role}`])]; return q;});
+          }
+          const interim=apply(base.questions,owner.changes,roles.roleOverrides??{});
+          const final=apply(interim,corrective.changes,{});
+          const expectedRoles={'562379b3-04e9-40ce-b7d8-9f75a87b324e':'qualifier_super','c31a47bc-4da4-4aff-a49f-578aee9b89d9':'qualifier_super','0064770a-6e6c-4de8-9231-568e197e2dcd':'team','704e2046-6bd6-40e1-91e9-08980f6e16d1':'regular','1a5362e8-5b49-477b-a292-7bb89f7ede94':'last'};
+          if(final.length!==20||new Set(final.map(q=>q.questionId)).size!==20||new Set(final.map(q=>q.contentKey)).size!==20) throw new Error('Final identity/count invalid');
+          for(const [pack,count] of Object.entries(owner.expectedPackShape)) if(final.filter(q=>q.pack===pack).length!==count) throw new Error(`${pack} count`);
+          for(const [id,role] of Object.entries(expectedRoles)) if(final.find(q=>q.questionId===id)?.role!==role) throw new Error(`${id} role`);
+          for(const q of final){if(!q.prompt?.trim()||!q.answer?.trim()||q.status!=='ready'||!Array.isArray(q.hints)||q.hints.length!==3||!Array.isArray(q.answerVariants)||q.answerVariants.length<2||!q.explanation?.trim()||!q.hostNotes?.trim()||!q.category?.trim()||!q.sourceLabel?.trim()||!q.sourceUrl?.trim()) throw new Error(`${q.contentKey} invalid`); if(!q.tags.includes('pilot01')||!q.tags.includes(`content:${q.contentKey}`)||!q.tags.includes(`role:${q.role}`)) throw new Error(`${q.contentKey} tags`);}
+          const forbidden=['bowerbird_forced_perspective','poison_squad','therese_humbert','cardiff_giant','roland_the_farter','radithor','poyais'];
+          for(const k of forbidden) if(final.some(q=>q.contentKey===k||q.tags.includes(`content:${k}`))) throw new Error(`Forbidden key in final ${k}`);
+          fs.writeFileSync('/tmp/interim.json',JSON.stringify(interim,null,2)+'\n');
+          fs.writeFileSync('/tmp/final.json',JSON.stringify({schemaVersion:1,pilot:'Pilot 01',revision:'owner_v3_1_corrected',status:'production_target',expectedProductionBuildSha:owner.expectedProductionBuildSha,expectedPackShape:owner.expectedPackShape,questions:final},null,2)+'\n');
+          console.log(`CORRECTED_TARGET_SHA256=${crypto.createHash('sha256').update(fs.readFileSync('/tmp/final.json')).digest('hex')}`);
+          console.log(`CORRECTIVE_SLOTS=${corrective.changes.map(x=>x.slot).join(',')}`);
+          NODE
+
+      - name: Guarded corrective update and full 20-card readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'; import crypto from 'node:crypto';
+          const interim=JSON.parse(fs.readFileSync('/tmp/interim.json','utf8'));
+          const targetText=fs.readFileSync('/tmp/final.json','utf8'); const target=JSON.parse(targetText);
+          const corrective=JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_CORRECTIVE_IDENTITY_PATCH.json','utf8'));
+          const base=process.env.LIVE_URL,key=process.env.QUESTION_BANK_ADMIN_KEY,packNames=['Qualifier A','Qualifier B','Final'];
+          const interimById=new Map(interim.map(q=>[q.questionId,q])), targetById=new Map(target.questions.map(q=>[q.questionId,q])); const changed=new Set(corrective.changes.map(x=>x.questionId));
+          async function req(path,opt={},admin=true){const headers={...(opt.headers??{})}; if(admin) headers['x-question-bank-key']=key; const r=await fetch(`${base}${path}`,{...opt,headers,redirect:'follow'}); const text=await r.text(); let body; try{body=text?JSON.parse(text):{}}catch{body={raw:text.slice(0,1000)}} if(!r.ok) throw new Error(`${opt.method??'GET'} ${path} ${r.status}: ${JSON.stringify(body)}`); return body;}
+          const nt=t=>[...(t??[])].map(String).sort(); const cmp=q=>({prompt:q.prompt??null,answer:q.answer??null,answerVariants:q.answerVariants??[],hints:q.hints??[],explanation:q.explanation??null,hostNotes:q.hostNotes??null,category:q.category??null,difficulty:q.difficulty??null,sourceLabel:q.sourceLabel??null,sourceUrl:q.sourceUrl??null,status:q.status??null,tags:nt(q.tags)}); const same=(a,b)=>JSON.stringify(cmp(a))===JSON.stringify(cmp(b)); const ck=q=>{const t=(q.tags??[]).find(x=>String(x).startsWith('content:')); return t?String(t).slice(8):null}; const eq=(a,b,l)=>{if(JSON.stringify(a)!==JSON.stringify(b)) throw new Error(`${l} mismatch`)};
+          const h=await req('/api/health',{},false); if(h.ok!==true||h.database!=='ok'||h.buildSha!==target.expectedProductionBuildSha) throw new Error(`Health/build ${JSON.stringify(h)}`);
+          const qb=await req('/api/questions'), pb=await req('/api/question-packs'); const all=qb.questions??[], byId=new Map(all.map(q=>[q.id,q])); const nonPilot=new Set(all.filter(q=>!(q.tags??[]).includes('pilot01')).map(q=>q.id)); const pilot=all.filter(q=>(q.tags??[]).includes('pilot01'));
+          if(all.length!==22||pilot.length!==20||nonPilot.size!==2) throw new Error(`Counts total=${all.length} pilot=${pilot.length} nonPilot=${nonPilot.size}`);
+          const packsBefore=(pb.packs??[]).filter(p=>packNames.includes(p.name)); if(packsBefore.length!==3) throw new Error('Pack count'); for(const name of packNames){const ids=target.questions.filter(q=>q.pack===name).map(q=>q.questionId); eq(packsBefore.find(p=>p.name===name)?.questionIds??[],ids,`${name} ids`)}
+          let interimCount=0,finalCount=0; for(const q of target.questions){const a=byId.get(q.questionId); if(!a) throw new Error(`Missing ${q.questionId}`); const i=interimById.get(q.questionId); const ii=same(a,i), ff=same(a,q); if(!ii&&!ff) throw new Error(`Unexpected drift ${q.questionId} ${ck(a)}`); if(ff) finalCount++; else interimCount++;}
+          console.log(`Corrective preflight interim=${interimCount} final=${finalCount}`);
+          for(const q of target.questions){if(!changed.has(q.questionId)) continue; const cur=byId.get(q.questionId); if(same(cur,q)){console.log(`already-correct ${q.contentKey}`); continue;} const assets=(cur.assets??[]).map(a=>({kind:'existing',storagePath:a.storagePath,mimeType:a.mimeType,altText:a.altText??'',caption:a.caption??'',width:a.width??null,height:a.height??null})); const payload={id:q.questionId,prompt:q.prompt,answer:q.answer,answerVariants:q.answerVariants,explanation:q.explanation,hostNotes:q.hostNotes,category:q.category,difficulty:q.difficulty,sourceLabel:q.sourceLabel,sourceUrl:q.sourceUrl,status:q.status,hints:q.hints,tags:q.tags,assets}; const form=new FormData(); form.set('payload',JSON.stringify(payload)); const saved=await req('/api/questions',{method:'POST',body:form}); if(saved.id!==q.questionId) throw new Error(`Wrong save id ${q.contentKey}`); console.log(`corrected ${q.pack}/${q.contentKey}`);}
+          const ha=await req('/api/health',{},false); if(ha.ok!==true||ha.database!=='ok'||ha.buildSha!==target.expectedProductionBuildSha) throw new Error('Post health/build'); const qa=await req('/api/questions'), pa=await req('/api/question-packs'); const after=qa.questions??[], afterById=new Map(after.map(q=>[q.id,q])); if(after.length!==22) throw new Error('Post total'); for(const id of nonPilot) if(!afterById.has(id)) throw new Error(`Nonpilot lost ${id}`); for(const q of target.questions){const a=afterById.get(q.questionId); if(!a||!same(a,q)||ck(a)!==q.contentKey) throw new Error(`Final strict mismatch ${q.contentKey}`);} const canon=(pa.packs??[]).filter(p=>packNames.includes(p.name)); const summary=[]; for(const name of packNames){const ids=target.questions.filter(q=>q.pack===name).map(q=>q.questionId); eq(canon.find(p=>p.name===name)?.questionIds??[],ids,`${name} post`); summary.push({name,count:ids.length,contentKeys:ids.map(id=>targetById.get(id).contentKey)});} const pilotAfter=after.filter(q=>(q.tags??[]).includes('pilot01')); const forbiddenDoN=pilotAfter.filter(q=>(q.tags??[]).some(t=>String(t).toLowerCase().includes('double_or_nothing'))); const keys=new Set(pilotAfter.map(ck)); const forbiddenKeys=['bowerbird_forced_perspective','poison_squad','therese_humbert','cardiff_giant','roland_the_farter','radithor','poyais'].filter(k=>keys.has(k)); if(pilotAfter.length!==20||pilotAfter.some(q=>q.status!=='ready')||forbiddenDoN.length||forbiddenKeys.length) throw new Error(`Post policy failure`);
+          console.log('PILOT_01_OWNER_V3_CORRECTED_SYNC_VERIFIED_JSON_START'); console.log(JSON.stringify({revision:target.revision,targetSha256:crypto.createHash('sha256').update(targetText).digest('hex'),productionBuildSha:ha.buildSha,database:ha.database,totalQuestionCount:after.length,preservedNonPilotCount:nonPilot.size,pilotQuestionCount:pilotAfter.length,pilotReadyCount:pilotAfter.filter(q=>q.status==='ready').length,canonicalPackCount:canon.length,packs:summary,forbiddenDoubleOrNothingCount:forbiddenDoN.length,supersededContentKeysPresent:forbiddenKeys},null,2)); console.log('PILOT_01_OWNER_V3_CORRECTED_SYNC_VERIFIED_JSON_END');
+          NODE
