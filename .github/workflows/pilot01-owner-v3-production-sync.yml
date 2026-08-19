@@ -1,0 +1,342 @@
+name: Pilot 01 Owner V3 Guarded Production Sync
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pilot01-owner-v3-production-sync.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LIVE_URL: https://smartest-comedian-game.blufferus.workers.dev
+      QUESTION_BANK_ADMIN_KEY: ${{ secrets.QUESTION_BANK_ADMIN_KEY }}
+
+    steps:
+      - name: Checkout exact ops head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Resolve guards and compose exact owner V3 target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${QUESTION_BANK_ADMIN_KEY:-}" || { echo "QUESTION_BANK_ADMIN_KEY unavailable" >&2; exit 1; }
+
+          git fetch --no-tags origin main
+          LIVE_MAIN_SHA="$(git rev-parse FETCH_HEAD)"
+          PATCH_MAIN_SHA="$(node -p "require('./ops/PILOT_01_OWNER_V3_PRODUCTION_PATCH.json').expectedMainSha")"
+          test "${LIVE_MAIN_SHA}" = "${PATCH_MAIN_SHA}" || {
+            echo "origin/main drift: expected ${PATCH_MAIN_SHA}, got ${LIVE_MAIN_SHA}" >&2
+            exit 1
+          }
+
+          git fetch --no-tags origin docs/pilot01-v2-4-production-closure
+          git show FETCH_HEAD:docs/PILOT_01_PRODUCTION_CONTENT.json > /tmp/pilot01-v24-production.json
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+
+          const base = JSON.parse(fs.readFileSync('/tmp/pilot01-v24-production.json', 'utf8'));
+          const patch = JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_PRODUCTION_PATCH.json', 'utf8'));
+
+          if (base.revision !== 'difficulty_v2_4' || base.status !== 'production_verified') {
+            throw new Error(`Unexpected base authority: ${base.revision}/${base.status}`);
+          }
+          if (base.productionBuildSha !== patch.expectedProductionBuildSha) {
+            throw new Error(`Base build SHA mismatch: ${base.productionBuildSha}`);
+          }
+          if (base.targetSha256 !== patch.expectedBaseTargetSha256) {
+            throw new Error(`Base target digest mismatch: ${base.targetSha256}`);
+          }
+
+          const byId = new Map(base.questions.map(q => [q.questionId, structuredClone(q)]));
+          const controlFields = new Set(['slot', 'questionId']);
+          for (const raw of patch.changes) {
+            const current = byId.get(raw.questionId);
+            if (!current) throw new Error(`${raw.slot}: unknown UUID ${raw.questionId}`);
+            const next = structuredClone(current);
+            for (const [key, value] of Object.entries(raw)) {
+              if (!controlFields.has(key)) next[key] = value;
+            }
+            byId.set(raw.questionId, next);
+          }
+
+          const finalQuestions = base.questions.map(original => {
+            const q = byId.get(original.questionId);
+            const tags = (q.tags ?? []).map(String).filter(t => !t.startsWith('content:') && !t.startsWith('role:'));
+            q.tags = [...new Set([...tags, `content:${q.contentKey}`, `role:${q.role}`])];
+            return q;
+          });
+
+          const target = {
+            schemaVersion: 1,
+            pilot: 'Pilot 01',
+            revision: patch.revision,
+            status: 'production_target',
+            expectedMainSha: patch.expectedMainSha,
+            expectedProductionBuildSha: patch.expectedProductionBuildSha,
+            expectedBaseTargetSha256: patch.expectedBaseTargetSha256,
+            expectedPackShape: patch.expectedPackShape,
+            questions: finalQuestions,
+          };
+
+          const qs = target.questions;
+          if (qs.length !== 20) throw new Error(`Expected 20 questions, got ${qs.length}`);
+          if (new Set(qs.map(q => q.questionId)).size !== 20) throw new Error('Duplicate questionId');
+          if (new Set(qs.map(q => q.contentKey)).size !== 20) throw new Error('Duplicate contentKey');
+
+          for (const [pack, count] of Object.entries(patch.expectedPackShape)) {
+            const actual = qs.filter(q => q.pack === pack).length;
+            if (actual !== count) throw new Error(`${pack}: expected ${count}, got ${actual}`);
+          }
+
+          const roleExpectations = {
+            '562379b3-04e9-40ce-b7d8-9f75a87b324e': 'qualifier_super',
+            'c31a47bc-4da4-4aff-a49f-578aee9b89d9': 'qualifier_super',
+            '0064770a-6e6c-4de8-9231-568e197e2dcd': 'team',
+            '1a5362e8-5b49-477b-a292-7bb89f7ede94': 'last',
+          };
+          for (const [id, role] of Object.entries(roleExpectations)) {
+            if (byId.get(id)?.role !== role) throw new Error(`${id}: expected role ${role}`);
+          }
+
+          for (const q of qs) {
+            if (!q.questionId || !q.contentKey || !q.prompt?.trim() || !q.answer?.trim()) throw new Error(`${q.contentKey}: required field missing`);
+            if (q.status !== 'ready') throw new Error(`${q.contentKey}: status must be ready`);
+            if (!Array.isArray(q.hints) || q.hints.length !== 3 || q.hints.some(v => !String(v).trim())) throw new Error(`${q.contentKey}: exactly 3 nonempty hints required`);
+            if (!Array.isArray(q.answerVariants) || q.answerVariants.length < 2) throw new Error(`${q.contentKey}: answer variants required`);
+            if (!q.explanation?.trim() || !q.hostNotes?.trim() || !q.category?.trim() || !q.sourceLabel?.trim() || !q.sourceUrl?.trim()) throw new Error(`${q.contentKey}: metadata missing`);
+            if (!Array.isArray(q.tags) || !q.tags.includes('pilot01') || !q.tags.includes(`content:${q.contentKey}`) || !q.tags.includes(`role:${q.role}`)) throw new Error(`${q.contentKey}: canonical tags missing`);
+            if (q.tags.some(tag => String(tag).toLowerCase().includes('double_or_nothing'))) throw new Error(`${q.contentKey}: forbidden Double-or-Nothing tag`);
+          }
+
+          for (const oldKey of patch.forbiddenContentKeys ?? []) {
+            if (qs.some(q => q.contentKey === oldKey || q.tags.includes(`content:${oldKey}`))) {
+              throw new Error(`Superseded content key survived target composition: ${oldKey}`);
+            }
+          }
+
+          const serialized = JSON.stringify(target, null, 2) + '\n';
+          fs.writeFileSync('/tmp/pilot01-owner-v3-target.json', serialized);
+          const digest = crypto.createHash('sha256').update(serialized).digest('hex');
+          console.log(`OWNER_V3_TARGET_SHA256=${digest}`);
+          console.log(`OWNER_V3_CHANGED_SLOTS=${patch.changes.map(x => x.slot).join(',')}`);
+          console.log(`OWNER_V3_CONTENT_KEYS=${qs.map(q => q.contentKey).join('|')}`);
+          NODE
+
+      - name: Guarded idempotent update and strict readback
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+
+          const baseSnapshot = JSON.parse(fs.readFileSync('/tmp/pilot01-v24-production.json', 'utf8'));
+          const patch = JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_PRODUCTION_PATCH.json', 'utf8'));
+          const targetText = fs.readFileSync('/tmp/pilot01-owner-v3-target.json', 'utf8');
+          const target = JSON.parse(targetText);
+
+          const base = process.env.LIVE_URL;
+          const key = process.env.QUESTION_BANK_ADMIN_KEY;
+          const packNames = ['Qualifier A', 'Qualifier B', 'Final'];
+          const changedIds = new Set(patch.changes.map(x => x.questionId));
+          const baseById = new Map(baseSnapshot.questions.map(q => [q.questionId, q]));
+          const targetById = new Map(target.questions.map(q => [q.questionId, q]));
+
+          async function request(path, options = {}, admin = true) {
+            const headers = { ...(options.headers ?? {}) };
+            if (admin) headers['x-question-bank-key'] = key;
+            const response = await fetch(`${base}${path}`, { ...options, headers, redirect: 'follow' });
+            const text = await response.text();
+            let body;
+            try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text.slice(0, 1000) }; }
+            if (!response.ok) throw new Error(`${options.method ?? 'GET'} ${path} HTTP ${response.status}: ${JSON.stringify(body)}`);
+            return body;
+          }
+
+          function normalizedTags(tags) {
+            return [...(tags ?? [])].map(String).sort();
+          }
+          function comparable(q) {
+            return {
+              prompt: q.prompt ?? null,
+              answer: q.answer ?? null,
+              answerVariants: q.answerVariants ?? [],
+              hints: q.hints ?? [],
+              explanation: q.explanation ?? null,
+              hostNotes: q.hostNotes ?? null,
+              category: q.category ?? null,
+              difficulty: q.difficulty ?? null,
+              sourceLabel: q.sourceLabel ?? null,
+              sourceUrl: q.sourceUrl ?? null,
+              status: q.status ?? null,
+              tags: normalizedTags(q.tags),
+            };
+          }
+          function sameQuestion(actual, expected) {
+            return JSON.stringify(comparable(actual)) === JSON.stringify(comparable(expected));
+          }
+          function assertEq(actual, expected, label) {
+            if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+              throw new Error(`${label} mismatch\nexpected=${JSON.stringify(expected)}\nactual=${JSON.stringify(actual)}`);
+            }
+          }
+          function contentKeyOf(q) {
+            const tag = (q.tags ?? []).find(t => String(t).startsWith('content:'));
+            return tag ? String(tag).slice(8) : null;
+          }
+
+          const healthBefore = await request('/api/health', {}, false);
+          if (healthBefore.ok !== true || healthBefore.database !== 'ok') throw new Error(`Production health failed: ${JSON.stringify(healthBefore)}`);
+          if (healthBefore.buildSha !== patch.expectedProductionBuildSha) throw new Error(`Production build drift: ${healthBefore.buildSha}`);
+
+          const qBefore = await request('/api/questions');
+          const pBefore = await request('/api/question-packs');
+          const allBefore = qBefore.questions ?? [];
+          const byIdBefore = new Map(allBefore.map(q => [q.id, q]));
+          const pilotBefore = allBefore.filter(q => (q.tags ?? []).includes('pilot01'));
+          const nonPilotIdsBefore = new Set(allBefore.filter(q => !(q.tags ?? []).includes('pilot01')).map(q => q.id));
+
+          if (allBefore.length !== 22) throw new Error(`Expected 22 total questions before mutation, got ${allBefore.length}`);
+          if (pilotBefore.length !== 20) throw new Error(`Expected 20 pilot questions before mutation, got ${pilotBefore.length}`);
+          if (nonPilotIdsBefore.size !== 2) throw new Error(`Expected 2 non-pilot questions before mutation, got ${nonPilotIdsBefore.size}`);
+
+          const canonicalBefore = (pBefore.packs ?? []).filter(p => packNames.includes(p.name));
+          if (canonicalBefore.length !== 3) throw new Error(`Expected 3 canonical packs, got ${canonicalBefore.length}`);
+          for (const name of packNames) {
+            const actualPack = canonicalBefore.find(p => p.name === name);
+            const expectedIds = baseSnapshot.questions.filter(q => q.pack === name).map(q => q.questionId);
+            assertEq(actualPack?.questionIds ?? [], expectedIds, `${name} questionIds preflight`);
+          }
+
+          let baseState = 0, targetState = 0;
+          for (const baseQ of baseSnapshot.questions) {
+            const actual = byIdBefore.get(baseQ.questionId);
+            if (!actual) throw new Error(`Production missing UUID ${baseQ.questionId}`);
+            const targetQ = targetById.get(baseQ.questionId);
+            const isBase = sameQuestion(actual, baseQ);
+            const isTarget = sameQuestion(actual, targetQ);
+            if (!isBase && !isTarget) {
+              throw new Error(`Unexpected production drift at ${baseQ.questionId} (${contentKeyOf(actual)}): matches neither V2.4 baseline nor owner V3 target`);
+            }
+            if (isTarget) targetState++; else baseState++;
+          }
+          console.log(`Preflight content states: baseline=${baseState}, target=${targetState}`);
+
+          for (const q of target.questions) {
+            if (!changedIds.has(q.questionId)) continue;
+            const current = byIdBefore.get(q.questionId);
+            if (sameQuestion(current, q)) {
+              console.log(`already-target ${q.pack} / ${q.contentKey}`);
+              continue;
+            }
+
+            const assets = (current.assets ?? []).map(asset => ({
+              kind: 'existing',
+              storagePath: asset.storagePath,
+              mimeType: asset.mimeType,
+              altText: asset.altText ?? '',
+              caption: asset.caption ?? '',
+              width: asset.width ?? null,
+              height: asset.height ?? null,
+            }));
+
+            const payload = {
+              id: q.questionId,
+              prompt: q.prompt,
+              answer: q.answer,
+              answerVariants: q.answerVariants,
+              explanation: q.explanation,
+              hostNotes: q.hostNotes,
+              category: q.category,
+              difficulty: q.difficulty,
+              sourceLabel: q.sourceLabel,
+              sourceUrl: q.sourceUrl,
+              status: q.status,
+              hints: q.hints,
+              tags: q.tags,
+              assets,
+            };
+            const form = new FormData();
+            form.set('payload', JSON.stringify(payload));
+            const saved = await request('/api/questions', { method: 'POST', body: form });
+            if (saved.id !== q.questionId) throw new Error(`${q.contentKey}: save returned wrong id ${saved.id}`);
+            console.log(`updated ${q.pack} / ${q.contentKey} / ${q.questionId}`);
+          }
+
+          const healthAfter = await request('/api/health', {}, false);
+          if (healthAfter.ok !== true || healthAfter.database !== 'ok' || healthAfter.buildSha !== patch.expectedProductionBuildSha) {
+            throw new Error(`Post-update health/SHA mismatch: ${JSON.stringify(healthAfter)}`);
+          }
+
+          const qAfter = await request('/api/questions');
+          const pAfter = await request('/api/question-packs');
+          const allAfter = qAfter.questions ?? [];
+          const byIdAfter = new Map(allAfter.map(q => [q.id, q]));
+          if (allAfter.length !== 22) throw new Error(`Expected 22 total questions after mutation, got ${allAfter.length}`);
+          for (const id of nonPilotIdsBefore) if (!byIdAfter.has(id)) throw new Error(`Non-pilot question disappeared: ${id}`);
+
+          for (const q of target.questions) {
+            const actual = byIdAfter.get(q.questionId);
+            if (!actual) throw new Error(`${q.contentKey}: missing after update`);
+            if (!sameQuestion(actual, q)) {
+              throw new Error(`${q.contentKey}: strict content readback mismatch`);
+            }
+            if (contentKeyOf(actual) !== q.contentKey) throw new Error(`${q.contentKey}: content tag mismatch`);
+          }
+
+          const canonicalAfter = (pAfter.packs ?? []).filter(p => packNames.includes(p.name));
+          if (canonicalAfter.length !== 3) throw new Error(`Post-update canonical pack count ${canonicalAfter.length}`);
+          const packSummary = [];
+          for (const name of packNames) {
+            const pack = canonicalAfter.find(p => p.name === name);
+            const expectedIds = target.questions.filter(q => q.pack === name).map(q => q.questionId);
+            assertEq(pack?.questionIds ?? [], expectedIds, `${name} questionIds after`);
+            packSummary.push({
+              name,
+              count: expectedIds.length,
+              ids: expectedIds,
+              contentKeys: expectedIds.map(id => targetById.get(id).contentKey),
+            });
+          }
+
+          const pilotAfter = allAfter.filter(q => (q.tags ?? []).includes('pilot01'));
+          if (pilotAfter.length !== 20) throw new Error(`Expected 20 pilot questions after update, got ${pilotAfter.length}`);
+          if (pilotAfter.some(q => q.status !== 'ready')) throw new Error('Not all pilot questions are ready');
+          const forbiddenDoN = pilotAfter.filter(q => (q.tags ?? []).some(tag => String(tag).toLowerCase().includes('double_or_nothing')));
+          if (forbiddenDoN.length) throw new Error(`Forbidden Double-or-Nothing tags on ${forbiddenDoN.length} questions`);
+
+          const effectiveKeys = new Set(pilotAfter.map(contentKeyOf));
+          for (const oldKey of patch.forbiddenContentKeys ?? []) {
+            if (effectiveKeys.has(oldKey)) throw new Error(`Superseded production content key survived: ${oldKey}`);
+          }
+
+          const targetSha256 = crypto.createHash('sha256').update(targetText).digest('hex');
+          console.log('PILOT_01_OWNER_V3_SYNC_VERIFIED_JSON_START');
+          console.log(JSON.stringify({
+            revision: target.revision,
+            targetSha256,
+            productionBuildSha: healthAfter.buildSha,
+            database: healthAfter.database,
+            totalQuestionCount: allAfter.length,
+            preservedNonPilotCount: nonPilotIdsBefore.size,
+            pilotQuestionCount: pilotAfter.length,
+            pilotReadyCount: pilotAfter.filter(q => q.status === 'ready').length,
+            canonicalPackCount: canonicalAfter.length,
+            packs: packSummary,
+            forbiddenDoubleOrNothingCount: forbiddenDoN.length,
+            supersededContentKeysPresent: (patch.forbiddenContentKeys ?? []).filter(k => effectiveKeys.has(k)),
+          }, null, 2));
+          console.log('PILOT_01_OWNER_V3_SYNC_VERIFIED_JSON_END');
+          NODE
