@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "pilot": "Pilot 01",
+  "status": "human_test_candidate",
+  "sourceAuditPacket": "docs/PILOT_01_FINAL_BLIND_AUDIT_PACKET.md",
+  "sourceAuditBranch": "review/pilot01-final-blind-audit",
+  "independentBlindAuditsReconciled": 4,
+  "conceptReplacementsRequiredAfterReconciliation": 0,
+  "aiEditorialFrozen": true,
+  "productionSyncExecuted": false,
+  "packShape": {
+    "Qualifier A": 6,
+    "Qualifier B": 6,
+    "Final": 8
+  },
+  "roleCorrections": {
+    "A6": "qualifier_super",
+    "B6": "qualifier_super",
+    "F3": "team",
+    "F7": "regular",
+    "F8": "last"
+  },
+  "changes": {
+    "A2": {
+      "type": "hint_hardening",
+      "fields": ["hint3"],
+      "reason": "Remove semantic duplication of the answer while preserving a strong final clue."
+    },
+    "A3": {
+      "type": "factual_wording_microfix",
+      "fields": ["prompt", "answer"],
+      "reason": "Use influence at court/private access rather than overclaiming formal state-decision power."
+    },
+    "A4": {
+      "type": "hint_ladder_rebalance",
+      "fields": ["hint1", "hint2", "hint3"],
+      "reason": "Move the decisive apparent-size relationship to Hint 3."
+    },
+    "A5": {
+      "type": "hint_hardening",
+      "fields": ["hint3"],
+      "reason": "Remove fame/known synonym leak from Hint 3."
+    },
+    "A6": {
+      "type": "keyword_leak_fix",
+      "fields": ["hint2"],
+      "reason": "Remove the exact insurance keyword before the answer."
+    },
+    "B1": {
+      "type": "factual_origin_fix",
+      "fields": ["hostLabel", "prompt"],
+      "reason": "Anchor the garlic vagina-to-breath test in Hippocratic ancient Greek tradition rather than labeling it Egyptian."
+    },
+    "B3": {
+      "type": "substantive_prompt_and_hint_rewrite",
+      "fields": ["prompt", "hint1", "hint2", "hint3"],
+      "reason": "Hide the decisive fact that he produced another Vermeer-style painting before the player makes the forgery inference."
+    },
+    "B4": {
+      "type": "factual_evidence_caveat",
+      "fields": ["hostFactualNote"],
+      "reason": "Present self-insemination as the mechanism implied by experimental sperm-distribution evidence, not as a directly filmed act."
+    },
+    "B5": {
+      "type": "substantive_prompt_rewrite",
+      "fields": ["prompt", "hint1", "hint2", "hint3", "hostReveal"],
+      "reason": "Remove Poison Squad/additive framing from the cold prompt; preserve the nickname as reveal."
+    },
+    "B6": {
+      "type": "factual_framing_caveat",
+      "fields": ["prompt", "hostFactualNote"],
+      "reason": "Frame the red-card episode as the famous Kaiser account with supporting witnesses, not as uniformly proven biography."
+    },
+    "F1": {
+      "type": "hint_ladder_rebalance",
+      "fields": ["hint2", "hint3"],
+      "reason": "Do not state the full one-rival-versus-many geometry in Hint 2."
+    },
+    "F2": {
+      "type": "hint_hardening",
+      "fields": ["hint2"],
+      "reason": "Remove explicit accusation/response language that already identifies a trial."
+    },
+    "F3": {
+      "type": "team_question_hint_hardening",
+      "fields": ["hint2"],
+      "reason": "Remove explicit nine-month giveaway; keep Stork Derby as the final clue."
+    },
+    "F6": {
+      "type": "hint_ladder_rewrite",
+      "fields": ["hint2", "hint3"],
+      "reason": "Do not state other heirs/disputed inheritance before the player infers a legal inheritance dispute."
+    },
+    "F7": {
+      "type": "cold_prompt_reangle",
+      "fields": ["prompt", "hint1", "hint2", "hint3", "answer", "role"],
+      "reason": "Remove digestive-tract/food giveaway from the cold question and correct the mistaken Last designation."
+    },
+    "F8": {
+      "type": "metadata_only",
+      "fields": ["role"],
+      "reason": "F8 is the actual Last Question."
+    }
+  },
+  "unchangedConcepts": [
+    "A1", "A2", "A3", "A4", "A5", "A6",
+    "B1", "B2", "B3", "B4", "B5", "B6",
+    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"
+  ],
+  "humanReopenCriteria": [
+    "Repeated reflex solve before the setup lands",
+    "No useful hypothesis by Hint 2",
+    "A hint functions as the answer",
+    "Host cannot score reasonable semantic variants consistently",
+    "A factual/source challenge changes the premise",
+    "Actual pacing reveals a repeated difficulty cluster"
+  ],
+  "nextGate": "BLIND_HUMAN_TEST",
+  "afterHumanPass": "BUILD_ONE_EXACT_PRODUCTION_TARGET_AND_GUARDED_SYNC"
+}
