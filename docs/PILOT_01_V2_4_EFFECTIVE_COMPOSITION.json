@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "pilot": "Pilot 01",
+  "revision": "difficulty_v2_4_predeploy",
+  "status": "PREDEPLOY_COMPOSITION_AUTHORITY_NOT_DEPLOYED",
+  "purpose": "Single unambiguous composition authority for the accepted V2.4 candidate. Do not sync production from any intermediate patch file in isolation.",
+  "compositionPrecedenceLowToHigh": [
+    {
+      "source": "ops/PILOT_01_V2_2_TARGET.json",
+      "ref": "agent/pilot01-v2-2-production-sync",
+      "role": "base production payload"
+    },
+    {
+      "source": "docs/PILOT_01_V2_3_SOLVABILITY_PATCH.json",
+      "ref": "agent/pilot01-v2-3-self-contained-solvability",
+      "role": "V2.3 prompt/hint/answer overrides"
+    },
+    {
+      "source": "docs/PILOT_01_V2_3_OVERRIDE_F3_F8.json",
+      "ref": "agent/pilot01-v2-3-self-contained-solvability",
+      "role": "supersedes V2.3 F3 and F8 entries"
+    },
+    {
+      "source": "docs/PILOT_01_V2_4_PREDEPLOY_PATCH.json",
+      "ref": "agent/pilot01-v2-3-self-contained-solvability",
+      "role": "highest-precedence final V2.4 corrections/replacements"
+    }
+  ],
+  "packShape": [6, 6, 8],
+  "packs": [
+    {
+      "name": "Qualifier A",
+      "questions": [
+        {"questionId":"33671e68-4132-42f1-8b75-7c7dd28da440","contentKey":"elmer_mccurdy_funhouse","role":"regular"},
+        {"questionId":"8a582797-3a34-4722-a828-b2cffd62364a","contentKey":"spider_gift","role":"regular"},
+        {"questionId":"a53bf174-f640-4dfc-949c-3b59743117d0","contentKey":"groom_of_the_stool","role":"regular"},
+        {"questionId":"21cdc9e9-2a30-4a99-b0af-5f146d4e38f9","contentKey":"bowerbird_forced_perspective","role":"regular"},
+        {"questionId":"2e18bb2d-28db-4605-93f6-e2a9b5ea694e","contentKey":"berners_street_hoax","role":"regular"},
+        {"questionId":"562379b3-04e9-40ce-b7d8-9f75a87b324e","contentKey":"apollo_insurance_covers","role":"qualifier_super"}
+      ]
+    },
+    {
+      "name": "Qualifier B",
+      "questions": [
+        {"questionId":"06b8fa5b-1b79-42c7-b446-0749d26ac207","contentKey":"garlic","role":"regular"},
+        {"questionId":"90b575d1-aca4-44bb-b303-c6cd8d5a856a","contentKey":"wife_sale","role":"regular"},
+        {"questionId":"fe1ed1be-29c3-4765-84aa-bee7bc458955","contentKey":"cardiff_giant","role":"regular"},
+        {"questionId":"86cff638-a194-4f28-948f-b07951df9d64","contentKey":"flatworm_self_insemination","role":"regular"},
+        {"questionId":"e67250b6-fdbe-4b6a-b630-460428e7ea63","contentKey":"poison_squad","role":"regular"},
+        {"questionId":"c31a47bc-4da4-4aff-a49f-578aee9b89d9","contentKey":"carlos_kaiser_red_card_escape","role":"qualifier_super"}
+      ]
+    },
+    {
+      "name": "Final",
+      "questions": [
+        {"questionId":"ee295c17-7604-4f65-8ac2-72e81a00b411","contentKey":"cuttlefish_disguise","role":"regular"},
+        {"questionId":"63a4747f-a49d-47e4-a5de-744203039542","contentKey":"cadaver_synod","role":"regular"},
+        {"questionId":"0064770a-6e6c-4de8-9231-568e197e2dcd","contentKey":"great_stork_derby","role":"team"},
+        {"questionId":"1c8b89e8-bee7-431d-a56a-c01a0acb8b14","contentKey":"roland_the_farter","role":"regular"},
+        {"questionId":"f95649f9-29fc-4e87-be87-ba414a5e22f8","contentKey":"radithor","role":"regular"},
+        {"questionId":"169ab247-1b0f-4707-88a0-3c6d5aaf879b","contentKey":"therese_humbert","role":"regular"},
+        {"questionId":"704e2046-6bd6-40e1-91e9-08980f6e16d1","contentKey":"poyais","role":"last"},
+        {"questionId":"1a5362e8-5b49-477b-a292-7bb89f7ede94","contentKey":"mortsafe_body_snatchers","role":"regular"}
+      ]
+    }
+  ],
+  "supersededContentKeys": [
+    "flatworm_penis_fencing",
+    "princess_caraboo",
+    "brinkley_goat_glands_abc",
+    "operation_mincemeat_pocket_litter"
+  ],
+  "deploymentRules": {
+    "preserveQuestionUuids": true,
+    "preservePackShape": true,
+    "preserveListedPackOrder": true,
+    "requireExactlyThreeHintsPerQuestion": true,
+    "requireStatusReady": true,
+    "forbidDoubleOrNothingTags": true,
+    "strictProductionReadbackRequired": true
+  }
+}
