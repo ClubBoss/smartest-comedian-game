@@ -1,0 +1,182 @@
+name: Pilot 01 Owner V3 Guarded Production Sync V2
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pilot01-owner-v3-production-sync-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LIVE_URL: https://smartest-comedian-game.blufferus.workers.dev
+      QUESTION_BANK_ADMIN_KEY: ${{ secrets.QUESTION_BANK_ADMIN_KEY }}
+
+    steps:
+      - name: Checkout exact ops head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Compose exact owner V3 target with role overrides
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${QUESTION_BANK_ADMIN_KEY:-}" || { echo "QUESTION_BANK_ADMIN_KEY unavailable" >&2; exit 1; }
+
+          git fetch --no-tags origin main
+          LIVE_MAIN_SHA="$(git rev-parse FETCH_HEAD)"
+          PATCH_MAIN_SHA="$(node -p "require('./ops/PILOT_01_OWNER_V3_PRODUCTION_PATCH.json').expectedMainSha")"
+          test "${LIVE_MAIN_SHA}" = "${PATCH_MAIN_SHA}" || { echo "origin/main drift: expected ${PATCH_MAIN_SHA}, got ${LIVE_MAIN_SHA}" >&2; exit 1; }
+
+          git fetch --no-tags origin docs/pilot01-v2-4-production-closure
+          git show FETCH_HEAD:docs/PILOT_01_PRODUCTION_CONTENT.json > /tmp/pilot01-v24-production.json
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const base = JSON.parse(fs.readFileSync('/tmp/pilot01-v24-production.json','utf8'));
+          const patch = JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_PRODUCTION_PATCH.json','utf8'));
+          const rolePatch = JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_ROLE_PATCH.json','utf8'));
+
+          if (base.revision !== 'difficulty_v2_4' || base.status !== 'production_verified') throw new Error(`Unexpected base authority: ${base.revision}/${base.status}`);
+          if (base.productionBuildSha !== patch.expectedProductionBuildSha) throw new Error(`Base build SHA mismatch: ${base.productionBuildSha}`);
+          if (base.targetSha256 !== patch.expectedBaseTargetSha256) throw new Error(`Base target digest mismatch: ${base.targetSha256}`);
+
+          const byId = new Map(base.questions.map(q => [q.questionId, structuredClone(q)]));
+          const controlFields = new Set(['slot','questionId']);
+          for (const raw of patch.changes) {
+            const current = byId.get(raw.questionId);
+            if (!current) throw new Error(`${raw.slot}: unknown UUID ${raw.questionId}`);
+            const next = structuredClone(current);
+            for (const [k,v] of Object.entries(raw)) if (!controlFields.has(k)) next[k] = v;
+            byId.set(raw.questionId,next);
+          }
+          for (const [id,role] of Object.entries(rolePatch.roleOverrides ?? {})) {
+            const q = byId.get(id);
+            if (!q) throw new Error(`Role override unknown UUID ${id}`);
+            q.role = role;
+          }
+
+          const finalQuestions = base.questions.map(original => {
+            const q = byId.get(original.questionId);
+            const tags = (q.tags ?? []).map(String).filter(t => !t.startsWith('content:') && !t.startsWith('role:'));
+            q.tags = [...new Set([...tags,`content:${q.contentKey}`,`role:${q.role}`])];
+            return q;
+          });
+
+          const target = {
+            schemaVersion:1,
+            pilot:'Pilot 01',
+            revision:patch.revision,
+            status:'production_target',
+            expectedMainSha:patch.expectedMainSha,
+            expectedProductionBuildSha:patch.expectedProductionBuildSha,
+            expectedBaseTargetSha256:patch.expectedBaseTargetSha256,
+            expectedPackShape:patch.expectedPackShape,
+            questions:finalQuestions,
+          };
+          const qs = target.questions;
+          if (qs.length !== 20 || new Set(qs.map(q=>q.questionId)).size !== 20 || new Set(qs.map(q=>q.contentKey)).size !== 20) throw new Error('Target identity/count validation failed');
+          for (const [pack,count] of Object.entries(patch.expectedPackShape)) if (qs.filter(q=>q.pack===pack).length !== count) throw new Error(`${pack}: wrong count`);
+          const expectedRoles = {
+            '562379b3-04e9-40ce-b7d8-9f75a87b324e':'qualifier_super',
+            'c31a47bc-4da4-4aff-a49f-578aee9b89d9':'qualifier_super',
+            '0064770a-6e6c-4de8-9231-568e197e2dcd':'team',
+            '704e2046-6bd6-40e1-91e9-08980f6e16d1':'regular',
+            '1a5362e8-5b49-477b-a292-7bb89f7ede94':'last',
+          };
+          for (const [id,role] of Object.entries(expectedRoles)) if (byId.get(id)?.role !== role) throw new Error(`${id}: expected role ${role}`);
+          for (const q of qs) {
+            if (!q.prompt?.trim() || !q.answer?.trim() || q.status !== 'ready') throw new Error(`${q.contentKey}: core field/status invalid`);
+            if (!Array.isArray(q.hints) || q.hints.length !== 3 || q.hints.some(x=>!String(x).trim())) throw new Error(`${q.contentKey}: hints invalid`);
+            if (!Array.isArray(q.answerVariants) || q.answerVariants.length < 2) throw new Error(`${q.contentKey}: variants invalid`);
+            if (!q.explanation?.trim() || !q.hostNotes?.trim() || !q.category?.trim() || !q.sourceLabel?.trim() || !q.sourceUrl?.trim()) throw new Error(`${q.contentKey}: metadata missing`);
+            if (!q.tags.includes('pilot01') || !q.tags.includes(`content:${q.contentKey}`) || !q.tags.includes(`role:${q.role}`)) throw new Error(`${q.contentKey}: tags invalid`);
+            if (q.tags.some(t=>String(t).toLowerCase().includes('double_or_nothing'))) throw new Error(`${q.contentKey}: forbidden DoN tag`);
+          }
+          for (const oldKey of patch.forbiddenContentKeys ?? []) if (qs.some(q=>q.contentKey===oldKey || q.tags.includes(`content:${oldKey}`))) throw new Error(`Superseded key survived: ${oldKey}`);
+
+          const serialized = JSON.stringify(target,null,2)+'\n';
+          fs.writeFileSync('/tmp/pilot01-owner-v3-target.json',serialized);
+          console.log(`OWNER_V3_TARGET_SHA256=${crypto.createHash('sha256').update(serialized).digest('hex')}`);
+          console.log(`OWNER_V3_CHANGED_SLOTS=${patch.changes.map(x=>x.slot).join(',')},F8-role`);
+          NODE
+
+      - name: Guarded idempotent update and strict readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const baseSnapshot = JSON.parse(fs.readFileSync('/tmp/pilot01-v24-production.json','utf8'));
+          const patch = JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_PRODUCTION_PATCH.json','utf8'));
+          const rolePatch = JSON.parse(fs.readFileSync('ops/PILOT_01_OWNER_V3_ROLE_PATCH.json','utf8'));
+          const targetText = fs.readFileSync('/tmp/pilot01-owner-v3-target.json','utf8');
+          const target = JSON.parse(targetText);
+          const base = process.env.LIVE_URL;
+          const key = process.env.QUESTION_BANK_ADMIN_KEY;
+          const packNames = ['Qualifier A','Qualifier B','Final'];
+          const changedIds = new Set([...patch.changes.map(x=>x.questionId), ...Object.keys(rolePatch.roleOverrides ?? {})]);
+          const targetById = new Map(target.questions.map(q=>[q.questionId,q]));
+
+          async function request(path,options={},admin=true){
+            const headers={...(options.headers??{})}; if(admin) headers['x-question-bank-key']=key;
+            const r=await fetch(`${base}${path}`,{...options,headers,redirect:'follow'}); const text=await r.text();
+            let body; try{body=text?JSON.parse(text):{}}catch{body={raw:text.slice(0,1000)}}
+            if(!r.ok) throw new Error(`${options.method??'GET'} ${path} HTTP ${r.status}: ${JSON.stringify(body)}`); return body;
+          }
+          const normTags=t=>[...(t??[])].map(String).sort();
+          const comparable=q=>({prompt:q.prompt??null,answer:q.answer??null,answerVariants:q.answerVariants??[],hints:q.hints??[],explanation:q.explanation??null,hostNotes:q.hostNotes??null,category:q.category??null,difficulty:q.difficulty??null,sourceLabel:q.sourceLabel??null,sourceUrl:q.sourceUrl??null,status:q.status??null,tags:normTags(q.tags)});
+          const same=(a,b)=>JSON.stringify(comparable(a))===JSON.stringify(comparable(b));
+          const contentKey=q=>{const t=(q.tags??[]).find(x=>String(x).startsWith('content:')); return t?String(t).slice(8):null};
+          const eq=(a,b,label)=>{if(JSON.stringify(a)!==JSON.stringify(b)) throw new Error(`${label} mismatch expected=${JSON.stringify(b)} actual=${JSON.stringify(a)}`)};
+
+          const healthBefore=await request('/api/health',{},false);
+          if(healthBefore.ok!==true || healthBefore.database!=='ok' || healthBefore.buildSha!==patch.expectedProductionBuildSha) throw new Error(`Preflight health/build mismatch: ${JSON.stringify(healthBefore)}`);
+          const qb=await request('/api/questions'); const pb=await request('/api/question-packs');
+          const allBefore=qb.questions??[]; const byIdBefore=new Map(allBefore.map(q=>[q.id,q]));
+          const pilotBefore=allBefore.filter(q=>(q.tags??[]).includes('pilot01')); const nonPilotIds=new Set(allBefore.filter(q=>!(q.tags??[]).includes('pilot01')).map(q=>q.id));
+          if(allBefore.length!==22 || pilotBefore.length!==20 || nonPilotIds.size!==2) throw new Error(`Preflight counts total=${allBefore.length} pilot=${pilotBefore.length} nonPilot=${nonPilotIds.size}`);
+          const canonBefore=(pb.packs??[]).filter(p=>packNames.includes(p.name)); if(canonBefore.length!==3) throw new Error(`Canonical pack count ${canonBefore.length}`);
+          for(const name of packNames){const exp=baseSnapshot.questions.filter(q=>q.pack===name).map(q=>q.questionId); eq(canonBefore.find(p=>p.name===name)?.questionIds??[],exp,`${name} preflight ids`)}
+
+          let baseline=0,targetCount=0;
+          for(const bq of baseSnapshot.questions){
+            const actual=byIdBefore.get(bq.questionId); if(!actual) throw new Error(`Missing production UUID ${bq.questionId}`);
+            const tq=targetById.get(bq.questionId); const isBase=same(actual,bq), isTarget=same(actual,tq);
+            if(!isBase && !isTarget) throw new Error(`Unexpected production drift ${bq.questionId} (${contentKey(actual)})`);
+            if(isTarget) targetCount++; else baseline++;
+          }
+          console.log(`Preflight content states baseline=${baseline} target=${targetCount}`);
+
+          for(const q of target.questions){
+            if(!changedIds.has(q.questionId)) continue;
+            const current=byIdBefore.get(q.questionId); if(same(current,q)){console.log(`already-target ${q.pack}/${q.contentKey}`); continue;}
+            const assets=(current.assets??[]).map(a=>({kind:'existing',storagePath:a.storagePath,mimeType:a.mimeType,altText:a.altText??'',caption:a.caption??'',width:a.width??null,height:a.height??null}));
+            const payload={id:q.questionId,prompt:q.prompt,answer:q.answer,answerVariants:q.answerVariants,explanation:q.explanation,hostNotes:q.hostNotes,category:q.category,difficulty:q.difficulty,sourceLabel:q.sourceLabel,sourceUrl:q.sourceUrl,status:q.status,hints:q.hints,tags:q.tags,assets};
+            const form=new FormData(); form.set('payload',JSON.stringify(payload));
+            const saved=await request('/api/questions',{method:'POST',body:form}); if(saved.id!==q.questionId) throw new Error(`${q.contentKey}: wrong saved id ${saved.id}`);
+            console.log(`updated ${q.pack}/${q.contentKey}/${q.questionId}`);
+          }
+
+          const healthAfter=await request('/api/health',{},false); if(healthAfter.ok!==true || healthAfter.database!=='ok' || healthAfter.buildSha!==patch.expectedProductionBuildSha) throw new Error(`Post health/build mismatch ${JSON.stringify(healthAfter)}`);
+          const qa=await request('/api/questions'); const pa=await request('/api/question-packs'); const allAfter=qa.questions??[]; const byIdAfter=new Map(allAfter.map(q=>[q.id,q]));
+          if(allAfter.length!==22) throw new Error(`Post total count ${allAfter.length}`); for(const id of nonPilotIds) if(!byIdAfter.has(id)) throw new Error(`Non-pilot disappeared ${id}`);
+          for(const q of target.questions){const actual=byIdAfter.get(q.questionId); if(!actual || !same(actual,q)) throw new Error(`${q.contentKey}: strict readback mismatch`); if(contentKey(actual)!==q.contentKey) throw new Error(`${q.contentKey}: content tag mismatch`)}
+          const canonAfter=(pa.packs??[]).filter(p=>packNames.includes(p.name)); if(canonAfter.length!==3) throw new Error(`Post canonical packs ${canonAfter.length}`);
+          const packs=[]; for(const name of packNames){const ids=target.questions.filter(q=>q.pack===name).map(q=>q.questionId); const pack=canonAfter.find(p=>p.name===name); eq(pack?.questionIds??[],ids,`${name} post ids`); packs.push({name,count:ids.length,contentKeys:ids.map(id=>targetById.get(id).contentKey)})}
+          const pilotAfter=allAfter.filter(q=>(q.tags??[]).includes('pilot01')); if(pilotAfter.length!==20 || pilotAfter.some(q=>q.status!=='ready')) throw new Error(`Pilot post count/status invalid`);
+          const forbidden=pilotAfter.filter(q=>(q.tags??[]).some(t=>String(t).toLowerCase().includes('double_or_nothing'))); if(forbidden.length) throw new Error(`Forbidden DoN count ${forbidden.length}`);
+          const effectiveKeys=new Set(pilotAfter.map(contentKey)); const superseded=(patch.forbiddenContentKeys??[]).filter(k=>effectiveKeys.has(k)); if(superseded.length) throw new Error(`Superseded keys survived ${superseded.join(',')}`);
+          console.log('PILOT_01_OWNER_V3_SYNC_VERIFIED_JSON_START');
+          console.log(JSON.stringify({revision:target.revision,targetSha256:crypto.createHash('sha256').update(targetText).digest('hex'),productionBuildSha:healthAfter.buildSha,database:healthAfter.database,totalQuestionCount:allAfter.length,preservedNonPilotCount:nonPilotIds.size,pilotQuestionCount:pilotAfter.length,pilotReadyCount:pilotAfter.filter(q=>q.status==='ready').length,canonicalPackCount:canonAfter.length,packs,forbiddenDoubleOrNothingCount:forbidden.length,supersededContentKeysPresent:superseded},null,2));
+          console.log('PILOT_01_OWNER_V3_SYNC_VERIFIED_JSON_END');
+          NODE
