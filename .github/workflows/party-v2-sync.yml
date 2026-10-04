@@ -1,0 +1,26 @@
+name: Party V2 guarded additive content sync
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/party-v2-sync.yml', 'ops/PARTY_V2_CONTENT.json', 'ops/sync-party-v2.mjs']
+permissions:
+  contents: read
+jobs:
+  sync:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: party-v2-content-sync
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Add V2 and verify all old content preserved
+        env:
+          QUESTION_BANK_ADMIN_KEY: ${{ secrets.QUESTION_BANK_ADMIN_KEY }}
+        run: node ops/sync-party-v2.mjs
